@@ -152,12 +152,17 @@ The AI/ML team must return:
 
 - baseline evaluation
 - labelled dataset
-- ML implementation
+- proposed ML approach
+- ML implementation only if justified by measurable improvement
 - baseline-vs-ML comparison
 - calibrated thresholds
 - evidence/explanation format
 - tests
 - integration instructions
+
+If the deterministic baseline performs sufficiently well for the MVP,
+the correct outcome is to keep the deterministic implementation rather
+than introduce ML unnecessarily.
 
 Keep the implementation compatible with the existing `app/services/matching.py` architecture.
 
