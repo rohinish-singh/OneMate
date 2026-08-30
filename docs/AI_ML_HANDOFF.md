@@ -1,49 +1,168 @@
 # AI/ML Handoff Guide
 
-This document defines the architectural boundaries for future AI and Machine Learning components integrating into the SIH26099 CPSE Material Harmonization backend.
+This document defines the MVP-only AI/ML boundary for the SIH26099 backend. The purpose is to prevent scope expansion beyond the existing deterministic matching baseline and to keep the team aligned with the validated MVP.
 
+## Core rule
 
-## AI/ML Implementation Rules
-The existing backend already has deterministic matching logic. AI/ML improvements must adhere to the following constraints:
+The existing matcher in `app/services/matching.py` is the working deterministic baseline.
 
-**AI/ML MUST:**
-- Evaluate the existing deterministic matcher first and build an improved ML approach only if it provides measurable benefit.
-- Preserve hard-conflict rules and NULL safety (missing identity-defining attributes prevent SAME classification).
-- Return standard outputs: `classification`, `confidence`, `evidence`, and `explanation`.
+The AI/ML workflow is:
 
-**AI/ML MUST NOT:**
-- Write directly to PostgreSQL or change the database schema.
-- Change automated harmonization logic, human review logic, or authentication.
-- Build a separate service (a normal Python module/function is sufficient for MVP).
-- Introduce external infrastructure (e.g., Vector Databases, Redis, Kafka, Celery, MLOps, LLM agents, or online training).
+1. Evaluate the existing deterministic matcher.
+2. Create labelled evaluation data from real or curated material pairs.
+3. Build a simple ML improvement only if it is justified by measurable gains.
+4. Compare baseline vs ML approach.
+5. Keep the ML version only if it improves high-precision SAME detection and safe review decisions.
+6. Integrate the final approach into the existing matching layer.
 
-## Current Backend (The Baseline)
-Currently, `app/services/` relies on deterministic logic:
-- **Normalization (`normalization.py`):** Uses Regex and string-matching to extract technical attributes.
-- **Candidate Generation (`matching.py`):** Uses cross-CPSE nested loops.
-- **Similarity/Matching (`matching.py`):** Uses standard library `difflib.SequenceMatcher` combined with structured attribute weightings to calculate a 0.0 - 1.0 confidence score.
-- **Classification (`matching.py`):** Sorts recommendations into `SAME`, `POTENTIALLY_EQUIVALENT`, or `DIFFERENT` based on static thresholds (`0.88` and `0.45`).
-- **Evidence Generation (`matching.py`):** Emits JSON attribute-by-attribute comparison dictionaries.
+The team must not assume that matching needs to be rebuilt from scratch. The baseline remains the primary implementation for the MVP.
 
-## Future AI/ML Extension Points
+## MVP AI/ML scope
 
-### 1. NLP / LLM Normalization
-**Location to replace/extend:** `app.services.normalization.normalize_material()`
-- **Goal:** Replace brittle Regex matching with LLM parsing to extract `valve_type`, `size`, `body_material`, `pressure_class`, `connection_type`, and `trim`.
-- **Constraint:** The output MUST map directly back into the existing PostgreSQL `Material` model columns. `NULL` must still be passed if an attribute cannot be definitively identified. 
+### In scope
 
-### 2. Candidate Generation
-**Location to replace/extend:** `app.services.matching.generate_candidates()`
-- **Goal:** Replace the current O(n²) loop with a more efficient candidate generation algorithm (e.g., in-memory embeddings or semantic search via a normal Python module/function). Do NOT introduce external vector databases (pgvector, Milvus), Redis, Kafka, or MLOps infrastructure for the MVP.
-- **Constraint:** The function must still return a list of `MatchRecommendation` objects. Candidates must still be strictly filtered so that intra-CPSE matches (matching a material to another material in the same CPSE) are rejected.
+- Evaluate the existing matching logic.
+- Improve material-pair similarity or scoring only when justified.
+- Use normalized technical attributes such as valve type, size, body material, pressure class, connection type, trim, and UOM.
+- Use text similarity and structured feature engineering.
+- Train a simple supervised model if labelled data is available.
+- Calibrate `SAME`, `POTENTIALLY_EQUIVALENT`, and `DIFFERENT` thresholds.
+- Produce `confidence`, `evidence`, and `explanation`.
+- Add tests for model integration and comparison.
+- Compare baseline vs improved approach using clear metrics.
 
-### 3. ML Confidence Scoring & Classification
-**Location to replace/extend:** `app.services.matching.classify_match()`
-- **Goal:** Replace `difflib` with a specialized ML model (e.g., cross-encoder or fine-tuned LLM) to generate the `confidence` float.
-- **Constraint:** **Hard-Conflict Vetoes must remain.** If a model predicts two materials are 0.99 identical, but one is clearly marked `DN50` and the other `DN100`, the system MUST strictly override the model to `DIFFERENT` with `0.0` confidence.
+Possible MVP models:
 
-### 4. Human-In-The-Loop Training Data
-**Location for extraction:** `AuditLog` and `MatchRecommendation`
-- **Goal:** Fine-tune ML models using human reviewer feedback.
-- **Integration:** Do not add a new feedback pipeline. Simply periodically dump the `AuditLog` where `entity_type="RECOMMENDATION"` and use the explicit `REJECT` or `MARK_DIFFERENT` statuses as negative samples, and `ACCEPT` as positive samples.
+- Logistic Regression
+- Random Forest
+- XGBoost / LightGBM
+
+Use the simplest model that demonstrates measurable improvement.
+
+### Explicitly out of scope for the MVP
+
+Do not build:
+
+- LLM-based normalization
+- LLM agents
+- fine-tuned LLMs
+- cross-encoder infrastructure
+- vector databases
+- pgvector
+- Milvus
+- Redis
+- Kafka
+- Celery
+- separate ML microservices
+- MLOps pipelines
+- online learning
+- automatic model retraining
+- production model-serving infrastructure
+- new database tables
+- new feedback pipelines
+
+Normalization remains the existing deterministic backend implementation for the MVP.
+
+Human review data may be used to create an offline labelled dataset, but automated retraining is out of scope.
+
+## Non-negotiable safety rules
+
+The ML model is never the final authority over technical conflicts.
+
+Hard conflicts must override ML predictions.
+
+Examples:
+
+- `CLASS150` vs `CLASS300` -> `DIFFERENT` -> confidence `0.0`
+- `DN50` vs `DN100` -> `DIFFERENT` -> confidence `0.0`
+- `BALL` vs `GATE` -> `DIFFERENT` -> confidence `0.0`
+- `RF` vs `SOCKET_WELD` -> `DIFFERENT` -> confidence `0.0`
+
+`NULL` means `UNKNOWN`.
+
+`NULL` is never a wildcard.
+
+Never infer a missing identity attribute simply to increase similarity.
+
+If required identity information is missing, the system must not turn the pair into an automatic `SAME` mapping.
+
+## Required output contract
+
+The matching component must continue to produce:
+
+- `classification`
+- `confidence`
+- `evidence`
+- `explanation`
+
+Classification values remain exactly:
+
+- `SAME`
+- `POTENTIALLY_EQUIVALENT`
+- `DIFFERENT`
+
+Do not introduce additional classifications for the MVP.
+
+## Backend boundary
+
+AI/ML must NOT directly:
+
+- `INSERT`
+- `UPDATE`
+- `DELETE`
+
+PostgreSQL data.
+
+AI/ML only returns a matching result. The backend remains responsible for:
+
+- database writes
+- transactions
+- `NationalMaterial`
+- mappings
+- `AuditLog`
+- human review
+- authentication
+- API behavior
+
+A normal Python module/function is sufficient. Do not create a separate service.
+
+## Baseline comparison requirement
+
+Before replacing any existing logic, the team must report:
+
+1. Existing matcher accuracy, precision, and recall where labelled data allows.
+2. False `SAME` cases.
+3. False `DIFFERENT` cases.
+4. `POTENTIALLY_EQUIVALENT` cases.
+5. Proposed ML approach.
+6. ML metrics.
+7. Baseline vs ML comparison.
+8. Recommended thresholds.
+
+The objective is not to maximize `SAME` matches. The objective is:
+
+- high-precision `SAME`
+- safe `DIFFERENT`
+- useful review queue
+
+## Deliverable required from the AI/ML team
+
+The AI/ML team must return:
+
+- baseline evaluation
+- labelled dataset
+- ML implementation
+- baseline-vs-ML comparison
+- calibrated thresholds
+- evidence/explanation format
+- tests
+- integration instructions
+
+Keep the implementation compatible with the existing `app/services/matching.py` architecture.
+
+## Final rule
+
+If an AI/ML feature is not required to demonstrate a better MVP matching result, do not build it.
+
+No scope expansion without explicit approval.
 
