@@ -164,7 +164,8 @@ If the deterministic baseline performs sufficiently well for the MVP,
 the correct outcome is to keep the deterministic implementation rather
 than introduce ML unnecessarily.
 
-Keep the implementation compatible with the existing `app/services/matching.py` architecture.
+Keep the implementation compatible with the existing
+`app/services/matching.py` architecture.
 
 ## Scope Lock
 
