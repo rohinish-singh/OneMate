@@ -169,6 +169,8 @@ Error responses always take the shape:
 
 #### Supported Actions & Business Rules:
 - **`ACCEPT`**: Approves a `SAME` or `POTENTIALLY_EQUIVALENT` match.
+  - *Rule*: Frontend MUST NOT assume that `ACCEPT` is valid for every `POTENTIALLY_EQUIVALENT` or `SAME` recommendation. The backend is authoritative and may reject `ACCEPT` with `HTTP 400` when business rules or incomplete identity data prevent safe acceptance.
+  - *Rule*: If the backend rejects `ACCEPT`, the frontend should display the backend error and allow the reviewer to use the appropriate action, such as `OVERRIDE`, when applicable.
   - *Rule*: Will return `400 Bad Request` if the source material has an incomplete identity (e.g., missing trim). Incomplete identities CANNOT be accepted natively; they must use `OVERRIDE`.
 - **`REJECT`**: Declines the match.
   - *Rule*: `reason` is **strictly required**.
@@ -190,6 +192,31 @@ Error responses always take the shape:
 
 ---
 
+## Frontend Scope Lock
+
+The frontend is responsible for:
+- displaying backend data
+- displaying classification, confidence, evidence, and explanations
+- uploading files
+- triggering normalization, matching, and harmonization endpoints
+- displaying the review queue
+- submitting human review actions
+- displaying backend success/error responses
+
+The frontend MUST NOT:
+- calculate matching scores
+- calculate confidence
+- classify materials
+- implement hard-conflict rules
+- infer missing attributes
+- decide whether a material is safe to harmonize
+- create NationalMaterials
+- create mappings directly
+- write to PostgreSQL
+- duplicate backend business rules
+
+The backend is the single authority for business logic and state.
+
 ## Workflows and Integration Rules
 
 **The backend is the absolute authority on business rules, mappings, and state.**
@@ -201,6 +228,7 @@ Error responses always take the shape:
 ### 2. Matching Workflow
 - **No Client-Side Scoring:** The frontend must NOT calculate text similarities or determine whether two values represent a "conflict". Simply display the JSON structure provided by the backend's `evidence` field.
 - **Classification Display:** Utilize standard UI badges for the backend's strict enum outputs: `SAME`, `POTENTIALLY_EQUIVALENT`, and `DIFFERENT`.
+- **Backend Contract Values:** The frontend must treat `SAME`, `POTENTIALLY_EQUIVALENT`, and `DIFFERENT` as backend contracts. Do not introduce frontend-only classifications.
 
 ### 3. Harmonization Workflow
 - **Automated Mapping:** The backend decides which `SAME` materials are safe for auto-harmonization based on complete identities. The frontend merely triggers `/harmonize`. Do NOT attempt to build client-side logic to determine if a material "should" be auto-harmonized.
