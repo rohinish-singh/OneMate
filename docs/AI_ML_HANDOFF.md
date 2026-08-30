@@ -1,35 +1,38 @@
-# AI/ML Handoff Guide
+## Purpose
 
-This document defines the MVP-only AI/ML boundary for the SIH26099 backend. The purpose is to prevent scope expansion beyond the existing deterministic matching baseline and to keep the team aligned with the validated MVP.
+This document defines the MVP-only AI/ML boundary for the SIH26099 backend. The purpose is to keep AI/ML work tightly focused on the existing deterministic matching baseline and to prevent scope expansion beyond what is required for a validated MVP.
 
-## Core rule
+The working backend baseline is the deterministic matcher in `app/services/matching.py`. The AI/ML team's job is not to rebuild the matching system from scratch. The job is to evaluate the existing matcher, measure whether a simple ML improvement is justified, and if it is, improve the matching/scoring/classification logic while preserving the safety rules already enforced by the backend.
 
-The existing matcher in `app/services/matching.py` is the working deterministic baseline.
+## Existing Backend Baseline
 
-The AI/ML workflow is:
+The current backend already contains working deterministic logic for the MVP:
 
-1. Evaluate the existing deterministic matcher.
-2. Create labelled evaluation data from real or curated material pairs.
-3. Build a simple ML improvement only if it is justified by measurable gains.
-4. Compare baseline vs ML approach.
-5. Keep the ML version only if it improves high-precision SAME detection and safe review decisions.
-6. Integrate the final approach into the existing matching layer.
+- Normalization is handled in the backend using deterministic parsing and attribute extraction.
+- Candidate generation occurs in the existing matching flow and is designed to compare materials across CPSEs while rejecting same-CPSE comparisons.
+- Similarity and scoring are computed using deterministic rules and structured attribute comparison.
+- Classification remains `SAME`, `POTENTIALLY_EQUIVALENT`, or `DIFFERENT`.
+- Evidence and explanation are produced from explicit attribute-level comparisons.
 
-The team must not assume that matching needs to be rebuilt from scratch. The baseline remains the primary implementation for the MVP.
+This deterministic matcher is the baseline. It is the reference implementation for the AI/ML team.
 
-## MVP AI/ML scope
+## AI/ML MVP Scope
 
-### In scope
+AI/ML work is in scope only when it demonstrates a measurable improvement over the existing deterministic matcher.
 
-- Evaluate the existing matching logic.
-- Improve material-pair similarity or scoring only when justified.
-- Use normalized technical attributes such as valve type, size, body material, pressure class, connection type, trim, and UOM.
-- Use text similarity and structured feature engineering.
-- Train a simple supervised model if labelled data is available.
-- Calibrate `SAME`, `POTENTIALLY_EQUIVALENT`, and `DIFFERENT` thresholds.
-- Produce `confidence`, `evidence`, and `explanation`.
-- Add tests for model integration and comparison.
-- Compare baseline vs improved approach using clear metrics.
+In scope:
+
+- evaluate the existing matching logic
+- improve material-pair similarity/scoring if justified
+- use normalized technical attributes
+- use text similarity and feature engineering
+- train a simple supervised model if labelled data exists
+- calibrate `SAME`, `POTENTIALLY_EQUIVALENT`, and `DIFFERENT` thresholds
+- produce `confidence`
+- produce `evidence`
+- produce `explanation`
+- add tests
+- compare baseline vs improved approach
 
 Possible MVP models:
 
@@ -37,35 +40,33 @@ Possible MVP models:
 - Random Forest
 - XGBoost / LightGBM
 
-Use the simplest model that demonstrates measurable improvement.
+Use the simplest model that demonstrates measurable improvement over the baseline.
 
-### Explicitly out of scope for the MVP
+## OUT OF MVP
 
-Do not build:
+The following are explicitly out of scope for the SIH26099 MVP:
 
 - LLM-based normalization
 - LLM agents
-- fine-tuned LLMs
-- cross-encoder infrastructure
-- vector databases
+- specialized model training beyond the MVP evaluation path
+- external vector storage systems
 - pgvector
 - Milvus
 - Redis
 - Kafka
 - Celery
 - separate ML microservices
-- MLOps pipelines
+- operational model-serving infrastructure
 - online learning
-- automatic model retraining
-- production model-serving infrastructure
+- production training loops
 - new database tables
 - new feedback pipelines
 
 Normalization remains the existing deterministic backend implementation for the MVP.
 
-Human review data may be used to create an offline labelled dataset, but automated retraining is out of scope.
+Human review data may be used to create an offline labelled dataset, but ongoing model retraining is out of scope.
 
-## Non-negotiable safety rules
+## Non-Negotiable Safety Rules
 
 The ML model is never the final authority over technical conflicts.
 
@@ -86,7 +87,7 @@ Never infer a missing identity attribute simply to increase similarity.
 
 If required identity information is missing, the system must not turn the pair into an automatic `SAME` mapping.
 
-## Required output contract
+## Required Output
 
 The matching component must continue to produce:
 
@@ -103,9 +104,9 @@ Classification values remain exactly:
 
 Do not introduce additional classifications for the MVP.
 
-## Backend boundary
+## Backend Boundary
 
-AI/ML must NOT directly:
+AI/ML must not directly:
 
 - `INSERT`
 - `UPDATE`
@@ -126,7 +127,7 @@ AI/ML only returns a matching result. The backend remains responsible for:
 
 A normal Python module/function is sufficient. Do not create a separate service.
 
-## Baseline comparison requirement
+## Evaluation
 
 Before replacing any existing logic, the team must report:
 
@@ -145,7 +146,7 @@ The objective is not to maximize `SAME` matches. The objective is:
 - safe `DIFFERENT`
 - useful review queue
 
-## Deliverable required from the AI/ML team
+## Deliverable
 
 The AI/ML team must return:
 
@@ -160,9 +161,11 @@ The AI/ML team must return:
 
 Keep the implementation compatible with the existing `app/services/matching.py` architecture.
 
-## Final rule
+## Scope Lock
 
 If an AI/ML feature is not required to demonstrate a better MVP matching result, do not build it.
 
 No scope expansion without explicit approval.
+
+The AI/ML team must remain within the deterministic backend baseline unless there is clear, measured evidence that a simple ML improvement yields a better MVP result.
 
