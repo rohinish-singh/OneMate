@@ -1,4 +1,3 @@
-Absolutely. Here's a clean **GitHub-ready README** for **OneMate**, keeping it aligned with the actual MVP rather than overselling future features.
 
 ````markdown
 # OneMate
