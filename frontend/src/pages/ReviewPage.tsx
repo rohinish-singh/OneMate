@@ -25,7 +25,9 @@ import type {
   MaterialDetailResponse,
   ReviewActionType,
   ReviewActionResponse,
+  CPSE,
 } from '../types/api';
+import { useCpse } from '../context/CpseContext';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
 import { EmptyState } from '../components/common/EmptyState';
@@ -36,6 +38,8 @@ import { ReviewActionModal } from '../components/review/ReviewActionModal';
 export const ReviewPage: React.FC = () => {
   const location = useLocation();
   const cpseScopeId = new URLSearchParams(location.search).get('cpseId');
+  const { selectedCpse } = useCpse();
+  const [scopedCpse, setScopedCpse] = useState<CPSE | null>(null);
 
   // Reviewer Authentication State
   const [reviewerToken, setReviewerToken] = useState<string>('');
@@ -66,6 +70,36 @@ export const ReviewPage: React.FC = () => {
 
   // Collapsible Raw Payloads
   const [showRawComparison, setShowRawComparison] = useState<boolean>(false);
+
+  // Identify scoped CPSE name and code
+  useEffect(() => {
+    if (!cpseScopeId) {
+      setScopedCpse(null);
+      return;
+    }
+
+    if (selectedCpse && selectedCpse.id === cpseScopeId) {
+      setScopedCpse(selectedCpse);
+      return;
+    }
+
+    let isCancelled = false;
+    api.cpses
+      .list()
+      .then((cpses) => {
+        if (!isCancelled) {
+          const found = cpses.find((c) => c.id === cpseScopeId);
+          setScopedCpse(found || null);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) setScopedCpse(null);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [cpseScopeId, selectedCpse]);
 
   // 1. Fetch Review Queue
   const fetchQueue = useCallback(async (token: string) => {
@@ -207,7 +241,6 @@ export const ReviewPage: React.FC = () => {
     setCandidateDetail(null);
   };
 
-
   const getClassificationBadgeVariant = (classification: string): BadgeVariant => {
     switch (classification.toUpperCase()) {
       case 'SAME':
@@ -263,12 +296,33 @@ export const ReviewPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
         <div>
           <h1 className="text-page-title text-charcoal">Review Queue</h1>
-          <p className="text-body text-charcoal-muted mt-1">
-            {cpseScopeId
-              ? 'Review queue scoped to the selected CPSE'
-              : 'Review uncertain matches and mapping decisions'}
-          </p>
+          {scopedCpse ? (
+            <div className="mt-1 space-y-0.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-body font-semibold text-charcoal">
+                  {scopedCpse.name}
+                </span>
+                <span className="text-charcoal-muted font-medium">·</span>
+                <span className="font-mono text-xs font-semibold text-charcoal bg-surface-secondary px-1.5 py-0.5 rounded-badge border border-border">
+                  {scopedCpse.code}
+                </span>
+              </div>
+              <p className="text-xs text-charcoal-caption">
+                Review queue scoped to this CPSE
+              </p>
+            </div>
+          ) : (
+            <div className="mt-1 space-y-0.5">
+              <div className="text-body font-semibold text-charcoal">
+                All CPSEs
+              </div>
+              <p className="text-xs text-charcoal-caption">
+                Review queue across all enterprises
+              </p>
+            </div>
+          )}
         </div>
+
 
         {/* Reviewer Authentication Strip */}
         <div className="flex items-center gap-2.5">
@@ -381,11 +435,14 @@ export const ReviewPage: React.FC = () => {
             {/* Queue Header & Filters */}
             <div className="p-3.5 border-b border-border bg-surface-secondary/40 space-y-2.5 shrink-0">
               <div className="flex items-center justify-between">
-                <span className="text-body-sm font-semibold text-charcoal">Pending Queue</span>
-                <span className="font-mono text-xs font-semibold text-charcoal bg-surface px-1.5 py-0.5 rounded-badge border border-border">
+                <span className="text-body-sm font-semibold text-charcoal">
+                  {scopedCpse ? 'Scoped Queue' : 'Review Queue'}
+                </span>
+                <span className="font-mono text-xs font-semibold text-charcoal bg-surface px-2 py-0.5 rounded-badge border border-border shadow-2xs">
                   {filteredQueue.length} items
                 </span>
               </div>
+
 
               {/* Classification / Category Filter Tabs */}
               <div className="flex items-center gap-1 p-0.5 bg-surface-secondary rounded-input border border-border text-[11px] font-medium">
