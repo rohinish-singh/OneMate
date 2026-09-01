@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.schemas.material import ImportSummary, MaterialDetailResponse
 from app.services.ingestion import process_material_import
 from app.services.normalization import normalize_material_record
-from app.models import Material
+from app.models import Material, MaterialNationalMapping, MatchRecommendation, NationalMaterial
 
 router = APIRouter()
 
@@ -149,12 +149,52 @@ def get_material(
     db: Session = Depends(get_db)
 ):
     """
-    Get full details for a single material.
+    Get full details for a single material with authoritative harmonization status.
     """
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
-    return material
+
+    # Check active mapping
+    mapping = db.query(
+        MaterialNationalMapping.material_id,
+        NationalMaterial.id.label("nm_id"),
+        NationalMaterial.national_code
+    ).join(
+        NationalMaterial, MaterialNationalMapping.national_material_id == NationalMaterial.id
+    ).filter(
+        MaterialNationalMapping.material_id == material_id,
+        MaterialNationalMapping.status == "ACTIVE"
+    ).first()
+
+    if mapping:
+        m_status = "MAPPED"
+        nm_code = mapping.national_code
+        nm_id = mapping.nm_id
+    else:
+        nm_code, nm_id = None, None
+        recs = db.query(
+            MatchRecommendation.classification
+        ).filter(
+            (MatchRecommendation.source_material_id == material_id) |
+            (MatchRecommendation.candidate_material_id == material_id)
+        ).all()
+        classifications = [r.classification for r in recs]
+        if "POTENTIALLY_EQUIVALENT" in classifications:
+            m_status = "NEEDS REVIEW"
+        elif "DIFFERENT" in classifications:
+            m_status = "DIFFERENT"
+        elif material.normalized_description and material.normalized_description.strip():
+            m_status = "UNMATCHED"
+        else:
+            m_status = "NOT PROCESSED"
+
+    res = MaterialDetailResponse.model_validate(material)
+    res.mapping_status = m_status
+    res.national_material_code = nm_code
+    res.national_material_id = nm_id
+    return res
+
 
 from app.schemas.material import MaterialMappingHistory, MaterialDeleteResponse
 from typing import List

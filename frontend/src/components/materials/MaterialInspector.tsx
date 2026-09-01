@@ -13,6 +13,7 @@ import { api, ApiClientError } from '../../api/client';
 import type { MaterialDetailResponse } from '../../types/api';
 import { LoadingState } from '../common/LoadingState';
 import { ErrorState } from '../common/ErrorState';
+import { Badge, type BadgeVariant } from '../common/Badge';
 
 interface MaterialInspectorProps {
   materialId: string | null;
@@ -30,6 +31,8 @@ export const MaterialInspector: React.FC<MaterialInspectorProps> = ({
   onDeleteRequest,
 }) => {
   const [detail, setDetail] = useState<MaterialDetailResponse | null>(null);
+  const [status, setStatus] = useState<string>('NOT PROCESSED');
+  const [nationalCode, setNationalCode] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,12 +40,30 @@ export const MaterialInspector: React.FC<MaterialInspectorProps> = ({
   const [showRawSource, setShowRawSource] = useState<boolean>(false);
   const [showNormalizedAttributes, setShowNormalizedAttributes] = useState<boolean>(false);
 
+  const getStatusVariant = (st?: string | null): BadgeVariant => {
+    switch (st?.toUpperCase()) {
+      case 'MAPPED':
+        return 'same';
+      case 'NEEDS REVIEW':
+      case 'POTENTIALLY_EQUIVALENT':
+        return 'potential';
+      case 'DIFFERENT':
+        return 'diff';
+      case 'UNMATCHED':
+      case 'NOT PROCESSED':
+      default:
+        return 'neutral';
+    }
+  };
+
   const fetchDetail = useCallback(async (id: string) => {
     setLoading(true);
     setError(null);
     try {
       const data = await api.materials.get(id);
       setDetail(data);
+      setStatus(data.mapping_status || 'NOT PROCESSED');
+      setNationalCode(data.national_material_code || null);
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         setError(err.message);
@@ -56,11 +77,14 @@ export const MaterialInspector: React.FC<MaterialInspectorProps> = ({
     }
   }, []);
 
+
   useEffect(() => {
     if (materialId) {
       fetchDetail(materialId);
     } else {
       setDetail(null);
+      setStatus('NOT PROCESSED');
+      setNationalCode(null);
       setError(null);
     }
   }, [materialId, fetchDetail]);
@@ -136,6 +160,56 @@ export const MaterialInspector: React.FC<MaterialInspectorProps> = ({
           />
         ) : detail ? (
           <>
+            {/* 0. HARMONIZATION STATUS */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between border-b border-border pb-1.5">
+                <h4 className="text-table-header uppercase text-charcoal-caption font-semibold tracking-wider">
+                  Harmonization
+                </h4>
+                <Badge variant={getStatusVariant(status)} className="text-[10px] font-semibold tracking-wider">
+                  {status}
+                </Badge>
+              </div>
+
+              <div className="space-y-2 text-body-sm">
+                <div>
+                  <span className="text-xs font-medium text-charcoal-muted block">Status</span>
+                  <span className="text-charcoal font-medium">{status}</span>
+                </div>
+                {status === 'MAPPED' && nationalCode ? (
+                  <div>
+                    <span className="text-xs font-medium text-charcoal-muted block">National Material</span>
+                    <span className="font-mono font-semibold text-brand">{nationalCode}</span>
+                  </div>
+                ) : null}
+                {status === 'NOT PROCESSED' && (
+                  <div>
+                    <span className="text-xs font-medium text-charcoal-muted block">Processing</span>
+                    <span className="text-charcoal-muted">Awaiting normalization and matching workflow.</span>
+                  </div>
+                )}
+                {status === 'NEEDS REVIEW' && (
+                  <div>
+                    <span className="text-xs font-medium text-charcoal-muted block">Review</span>
+                    <span className="text-semantic-potential-text">Unresolved candidate match pending human review.</span>
+                  </div>
+                )}
+                {status === 'DIFFERENT' && (
+                  <div>
+                    <span className="text-xs font-medium text-charcoal-muted block">Outcome</span>
+                    <span className="text-semantic-diff-text">Classified as distinct engineering material.</span>
+                  </div>
+                )}
+                {status === 'UNMATCHED' && (
+                  <div>
+                    <span className="text-xs font-medium text-charcoal-muted block">Outcome</span>
+                    <span className="text-charcoal-muted">Processed with no equivalent candidates found.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+
             {/* 1. SOURCE SECTION */}
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b border-border pb-1.5">

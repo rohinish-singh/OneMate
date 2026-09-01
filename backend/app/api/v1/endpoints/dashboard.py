@@ -54,10 +54,12 @@ def get_dashboard(db: Session = Depends(get_db)):
         automation_rate = round((auto_same_mappings / total_active_mappings) * 100.0, 1)
 
     # 3. Review
-    # Pending reviews: recommendations where source_material_id is NOT in active mappings
+    # Pending reviews: unresolved POTENTIALLY_EQUIVALENT recommendations where source is unmapped
     pending_reviews = db.query(func.count(MatchRecommendation.id)).filter(
+        MatchRecommendation.classification == "POTENTIALLY_EQUIVALENT",
         MatchRecommendation.source_material_id.notin_(active_mappings_query)
     ).scalar() or 0
+
 
     # Completed reviews: distinct recommendations that have an explicit human action in AuditLog
     completed_reviews = db.query(func.count(func.distinct(AuditLog.entity_id))).filter(

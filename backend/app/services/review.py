@@ -9,23 +9,48 @@ from app.models import (
 )
 from app.services.harmonization import get_identity_key, generate_canonical_desc
 
-def get_review_queue(db: Session, limit: int = 50) -> List[Dict[str, Any]]:
+def get_review_queue(db: Session, limit: int = 150) -> List[Dict[str, Any]]:
     """
-    Returns recommendations requiring human action.
-    This includes unmapped materials with POTENTIALLY_EQUIVALENT matches,
-    DIFFERENT matches, or SAME matches that failed auto-harmonization (e.g. missing attributes).
+    Returns recommendations with authoritative mapping and classification state.
+    Includes unresolved POTENTIALLY_EQUIVALENT recommendations, DIFFERENT recommendations,
+    and recommendations associated with completed MAPPED records.
     """
-    # Find source materials without an ACTIVE mapping
-    recs = db.query(MatchRecommendation).filter(
-        MatchRecommendation.source_material_id.notin_(db.query(MaterialNationalMapping.material_id).filter(MaterialNationalMapping.status == "ACTIVE"))
-    ).order_by(MatchRecommendation.created_at.desc()).limit(limit).all()
+    recs = db.query(MatchRecommendation).order_by(MatchRecommendation.created_at.desc()).limit(limit).all()
+    if not recs:
+        return []
+
+    src_ids = [rec.source_material_id for rec in recs]
+    mappings = db.query(
+        MaterialNationalMapping.material_id,
+        MaterialNationalMapping.basis,
+        NationalMaterial.id.label("nm_id"),
+        NationalMaterial.national_code
+    ).join(
+        NationalMaterial, MaterialNationalMapping.national_material_id == NationalMaterial.id
+    ).filter(
+        MaterialNationalMapping.material_id.in_(src_ids),
+        MaterialNationalMapping.status == "ACTIVE"
+    ).all()
+    mapping_dict = {row.material_id: (row.national_code, row.nm_id, row.basis) for row in mappings}
 
     queue = []
     for rec in recs:
-        # Pre-fetch the source material (can also use joins to optimize)
         src = db.get(Material, rec.source_material_id)
         if not src:
             continue
+
+        if rec.source_material_id in mapping_dict:
+            nm_code, nm_id, basis = mapping_dict[rec.source_material_id]
+            m_status = "MAPPED"
+        elif rec.classification == "POTENTIALLY_EQUIVALENT":
+            nm_code, nm_id, basis = None, None, None
+            m_status = "NEEDS REVIEW"
+        elif rec.classification == "DIFFERENT":
+            nm_code, nm_id, basis = None, None, None
+            m_status = "DIFFERENT"
+        else:
+            nm_code, nm_id, basis = None, None, None
+            m_status = "UNMATCHED"
 
         queue.append({
             "recommendation_id": str(rec.id),
@@ -35,6 +60,10 @@ def get_review_queue(db: Session, limit: int = 50) -> List[Dict[str, Any]]:
             "confidence": rec.confidence,
             "evidence": rec.evidence,
             "explanation": rec.explanation,
+            "mapping_status": m_status,
+            "national_material_code": nm_code,
+            "national_material_id": str(nm_id) if nm_id else None,
+            "mapping_basis": basis,
             "source_valve_type": src.valve_type,
             "source_size": src.size,
             "source_body_material": src.body_material,
@@ -43,6 +72,7 @@ def get_review_queue(db: Session, limit: int = 50) -> List[Dict[str, Any]]:
             "source_trim": src.trim
         })
     return queue
+
 
 def process_review_action(
     db: Session,

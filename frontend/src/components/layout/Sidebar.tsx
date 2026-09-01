@@ -3,7 +3,6 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Building2,
-  Package,
   GitCompare,
   CheckSquare,
   ShieldCheck,
@@ -20,7 +19,6 @@ export interface NavItem {
 export const navItems: NavItem[] = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { name: 'CPSEs', path: '/cpses', icon: Building2 },
-  { name: 'Materials', path: '/materials', icon: Package },
   { name: 'Matching', path: '/matching', icon: GitCompare },
   { name: 'Review Queue', path: '/review', icon: CheckSquare },
   { name: 'National Materials', path: '/national-materials', icon: ShieldCheck },

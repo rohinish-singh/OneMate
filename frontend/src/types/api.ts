@@ -62,7 +62,11 @@ export interface MaterialListItem {
   source_description: string;
   category: string | null;
   normalized_description: string | null;
+  mapping_status?: 'MAPPED' | 'NEEDS REVIEW' | 'DIFFERENT' | 'UNMATCHED' | string | null;
+  national_material_code?: string | null;
+  national_material_id?: string | null;
 }
+
 
 export interface MaterialDetailResponse {
   id: string;
@@ -82,9 +86,13 @@ export interface MaterialDetailResponse {
   normalized_uom: string | null;
   normalized_description: string | null;
   normalized_attributes: Record<string, unknown> | null;
+  mapping_status?: 'NOT PROCESSED' | 'MAPPED' | 'NEEDS REVIEW' | 'DIFFERENT' | 'UNMATCHED' | string | null;
+  national_material_code?: string | null;
+  national_material_id?: string | null;
   created_at: string;
   updated_at: string;
 }
+
 
 export interface ImportRowError {
   row: number;
@@ -189,6 +197,10 @@ export interface ReviewQueueItem {
   confidence: number | null;
   evidence: Record<string, unknown> | null;
   explanation: string | null;
+  mapping_status?: 'MAPPED' | 'NEEDS REVIEW' | 'DIFFERENT' | 'UNMATCHED' | string | null;
+  national_material_code?: string | null;
+  national_material_id?: string | null;
+  mapping_basis?: string | null;
   source_valve_type: string | null;
   source_size: string | null;
   source_body_material: string | null;
@@ -196,6 +208,7 @@ export interface ReviewQueueItem {
   source_connection_type: string | null;
   source_trim: string | null;
 }
+
 
 export interface ReviewQueueResponse {
   queue: ReviewQueueItem[];

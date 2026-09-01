@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ClipboardList,
 } from 'lucide-react';
 import { api, ApiClientError } from '../api/client';
 import type { MaterialListItem, MaterialDetailResponse } from '../types/api';
@@ -15,6 +16,7 @@ import { useCpse } from '../context/CpseContext';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
 import { EmptyState } from '../components/common/EmptyState';
+import { Badge } from '../components/common/Badge';
 import { MaterialInspector } from '../components/materials/MaterialInspector';
 import { MaterialImportModal } from '../components/materials/MaterialImportModal';
 import { MaterialDeleteModal } from '../components/materials/MaterialDeleteModal';
@@ -26,6 +28,7 @@ export const MaterialsPage: React.FC = () => {
   const [materials, setMaterials] = useState<MaterialListItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
 
   // Inspector and Import state
   const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
@@ -68,6 +71,22 @@ export const MaterialsPage: React.FC = () => {
     }
   }, [selectedCpse, fetchMaterials]);
 
+  const getStatusVariant = (state?: string | null) => {
+
+    switch (state?.toUpperCase()) {
+      case 'MAPPED':
+        return 'same';
+      case 'NEEDS REVIEW':
+      case 'POTENTIALLY_EQUIVALENT':
+        return 'potential';
+      case 'DIFFERENT':
+        return 'diff';
+      case 'UNMATCHED':
+      default:
+        return 'neutral';
+    }
+  };
+
   const handleDeleteSuccess = (deletedId: string) => {
     const deleted = materials.find((m) => m.id === deletedId);
     setMaterials((prev) => prev.filter((m) => m.id !== deletedId));
@@ -79,6 +98,12 @@ export const MaterialsPage: React.FC = () => {
         ? `Material ${deleted.source_material_code} deleted successfully.`
         : 'Material deleted successfully.'
     );
+  };
+
+
+  const handleReviewThisCpse = () => {
+    if (!selectedCpse) return;
+    navigate(`/review?cpseId=${selectedCpse.id}`);
   };
 
   // 1. NO CPSE SELECTED EMPTY STATE
@@ -125,7 +150,7 @@ export const MaterialsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
             onClick={fetchMaterials}
@@ -134,6 +159,14 @@ export const MaterialsPage: React.FC = () => {
             className="p-2 rounded-input border border-border bg-surface text-charcoal-muted hover:text-charcoal hover:bg-surface-secondary transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={handleReviewThisCpse}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-input border border-border bg-surface text-charcoal hover:bg-surface-secondary transition-colors shadow-xs"
+          >
+            <ClipboardList className="w-4 h-4" />
+            <span>Review this CPSE</span>
           </button>
           <button
             type="button"
@@ -212,6 +245,9 @@ export const MaterialsPage: React.FC = () => {
                     <th scope="col" className="py-2.5 px-4 font-medium min-w-[100px]">
                       Category
                     </th>
+                    <th scope="col" className="py-2.5 px-4 font-medium min-w-[180px]">
+                      Harmonization Status
+                    </th>
                     <th scope="col" className="py-2.5 px-4 font-medium min-w-[240px]">
                       Normalized Description
                     </th>
@@ -278,6 +314,34 @@ export const MaterialsPage: React.FC = () => {
                             <span className="text-charcoal-disabled italic text-xs">UNKNOWN</span>
                           )}
                         </td>
+
+                        {/* Harmonization Status */}
+                        <td className="py-3 px-4 align-top">
+                          <div className="space-y-1.5">
+                            <Badge
+                              variant={getStatusVariant(material.mapping_status)}
+                              className="text-[10px] font-semibold tracking-wider"
+                            >
+                              {material.mapping_status || 'UNMATCHED'}
+                            </Badge>
+                            {material.mapping_status === 'MAPPED' && material.national_material_code ? (
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate('/national-materials');
+                                  }}
+                                  title="View in National Materials Registry"
+                                  className="font-mono text-[11px] font-medium text-brand hover:underline bg-surface-secondary border border-border/80 rounded-badge px-1.5 py-0.5 inline-flex items-center gap-1 transition-colors"
+                                >
+                                  <span>{material.national_material_code}</span>
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+
 
                         {/* Normalized Description */}
                         <td className="py-3 px-4 text-body-sm text-charcoal leading-snug max-w-sm">

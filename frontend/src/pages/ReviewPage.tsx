@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   CheckSquare,
   KeyRound,
@@ -33,6 +34,9 @@ import { AttributeComparisonTable } from '../components/matching/AttributeCompar
 import { ReviewActionModal } from '../components/review/ReviewActionModal';
 
 export const ReviewPage: React.FC = () => {
+  const location = useLocation();
+  const cpseScopeId = new URLSearchParams(location.search).get('cpseId');
+
   // Reviewer Authentication State
   const [reviewerToken, setReviewerToken] = useState<string>('');
   const [tokenInput, setTokenInput] = useState<string>('');
@@ -42,10 +46,12 @@ export const ReviewPage: React.FC = () => {
 
   // Queue state
   const [queue, setQueue] = useState<ReviewQueueItem[]>([]);
+  const [cpseScopeMaterialIds, setCpseScopeMaterialIds] = useState<string[]>([]);
   const [queueLoading, setQueueLoading] = useState<boolean>(false);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [queueSearch, setQueueSearch] = useState<string>('');
-  const [classificationFilter, setClassificationFilter] = useState<string>('ALL');
+  type QueueCategoryFilter = 'ALL' | 'POTENTIAL' | 'DIFFERENT' | 'MAPPED';
+  const [classificationFilter, setClassificationFilter] = useState<QueueCategoryFilter>('ALL');
 
   // Selected recommendation & details
   const [selectedItem, setSelectedItem] = useState<ReviewQueueItem | null>(null);
@@ -112,7 +118,39 @@ export const ReviewPage: React.FC = () => {
     setSelectedItem(null);
     setSourceDetail(null);
     setCandidateDetail(null);
+    sessionStorage.removeItem('onemate_reviewer_token');
   };
+
+  useEffect(() => {
+    if (!cpseScopeId) {
+      setCpseScopeMaterialIds([]);
+      return;
+    }
+
+    let isCancelled = false;
+    api.materials
+      .listByCpse(cpseScopeId)
+      .then((materials) => {
+        if (!isCancelled) {
+          setCpseScopeMaterialIds(materials.map((item) => item.id));
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setCpseScopeMaterialIds([]);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [cpseScopeId]);
+
+  useEffect(() => {
+    if (reviewerToken) {
+      sessionStorage.setItem('onemate_reviewer_token', reviewerToken);
+    }
+  }, [reviewerToken]);
 
   // 2. Fetch details when selectedItem changes
   useEffect(() => {
@@ -157,9 +195,10 @@ export const ReviewPage: React.FC = () => {
     };
   }, [selectedItem]);
 
-  // 3. Action Complete Handler
+  // Handle successful action execution
   const handleActionSuccess = (res: ReviewActionResponse) => {
     setActionSuccessMessage(`Action "${res.action}" successfully recorded by backend.`);
+    setIsAuthenticated(true);
     // Refresh queue
     fetchQueue(reviewerToken);
     // Clear selection
@@ -168,11 +207,15 @@ export const ReviewPage: React.FC = () => {
     setCandidateDetail(null);
   };
 
+
   const getClassificationBadgeVariant = (classification: string): BadgeVariant => {
     switch (classification.toUpperCase()) {
       case 'SAME':
+      case 'MAPPED':
         return 'same';
       case 'POTENTIALLY_EQUIVALENT':
+      case 'POTENTIAL':
+      case 'NEEDS REVIEW':
         return 'potential';
       case 'DIFFERENT':
         return 'diff';
@@ -183,18 +226,33 @@ export const ReviewPage: React.FC = () => {
 
   // Filter Queue Items
   const filteredQueue = queue.filter((item) => {
-    const matchesFilter =
-      classificationFilter === 'ALL' ||
-      item.classification.toUpperCase() === classificationFilter.toUpperCase();
+    const inCpseScope =
+      cpseScopeMaterialIds.length === 0 ||
+      cpseScopeMaterialIds.includes(item.source_material_id) ||
+      cpseScopeMaterialIds.includes(item.candidate_material_id);
+
+    let matchesFilter = true;
+    if (classificationFilter === 'POTENTIAL') {
+      matchesFilter = item.classification === 'POTENTIALLY_EQUIVALENT' && item.mapping_status !== 'MAPPED';
+    } else if (classificationFilter === 'DIFFERENT') {
+      matchesFilter = item.classification === 'DIFFERENT' && item.mapping_status !== 'MAPPED';
+    } else if (classificationFilter === 'MAPPED') {
+      matchesFilter = item.mapping_status === 'MAPPED';
+    } else if (classificationFilter === 'ALL') {
+      matchesFilter = true;
+    }
 
     const q = queueSearch.toLowerCase().trim();
-    if (!q) return matchesFilter;
+    if (!q) return inCpseScope && matchesFilter;
 
     return (
+      inCpseScope &&
       matchesFilter &&
       (item.recommendation_id.toLowerCase().includes(q) ||
         item.source_material_id.toLowerCase().includes(q) ||
         item.candidate_material_id.toLowerCase().includes(q) ||
+        (item.national_material_code && item.national_material_code.toLowerCase().includes(q)) ||
+        (item.mapping_basis && item.mapping_basis.toLowerCase().includes(q)) ||
         (item.explanation && item.explanation.toLowerCase().includes(q)))
     );
   });
@@ -206,7 +264,9 @@ export const ReviewPage: React.FC = () => {
         <div>
           <h1 className="text-page-title text-charcoal">Review Queue</h1>
           <p className="text-body text-charcoal-muted mt-1">
-            Review uncertain matches and mapping decisions
+            {cpseScopeId
+              ? 'Review queue scoped to the selected CPSE'
+              : 'Review uncertain matches and mapping decisions'}
           </p>
         </div>
 
@@ -327,9 +387,9 @@ export const ReviewPage: React.FC = () => {
                 </span>
               </div>
 
-              {/* Classification Filter Tabs */}
+              {/* Classification / Category Filter Tabs */}
               <div className="flex items-center gap-1 p-0.5 bg-surface-secondary rounded-input border border-border text-[11px] font-medium">
-                {['ALL', 'SAME', 'POTENTIALLY_EQUIVALENT', 'DIFFERENT'].map((tab) => (
+                {(['ALL', 'POTENTIAL', 'DIFFERENT', 'MAPPED'] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -340,7 +400,7 @@ export const ReviewPage: React.FC = () => {
                         : 'text-charcoal-muted hover:text-charcoal'
                     }`}
                   >
-                    {tab === 'POTENTIALLY_EQUIVALENT' ? 'POTENTIAL' : tab}
+                    {tab}
                   </button>
                 ))}
               </div>
@@ -367,6 +427,7 @@ export const ReviewPage: React.FC = () => {
               ) : (
                 filteredQueue.map((item) => {
                   const isSelected = selectedItem?.recommendation_id === item.recommendation_id;
+                  const isMapped = item.mapping_status === 'MAPPED';
 
                   return (
                     <button
@@ -380,9 +441,22 @@ export const ReviewPage: React.FC = () => {
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <Badge variant={getClassificationBadgeVariant(item.classification)}>
-                          {item.classification}
-                        </Badge>
+                        {isMapped ? (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge variant="same" className="text-[10px] font-semibold">
+                              MAPPED
+                            </Badge>
+                            {item.national_material_code && (
+                              <span className="font-mono text-[11px] font-semibold text-charcoal bg-surface-secondary px-1.5 py-0.5 rounded-badge border border-border">
+                                {item.national_material_code}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <Badge variant={getClassificationBadgeVariant(item.classification)}>
+                            {item.classification === 'POTENTIALLY_EQUIVALENT' ? 'POTENTIAL' : item.classification}
+                          </Badge>
+                        )}
                         {item.confidence !== null && (
                           <span className="font-mono text-xs font-semibold text-charcoal">
                             {Math.round(item.confidence * 100)}% Match
@@ -390,11 +464,15 @@ export const ReviewPage: React.FC = () => {
                         )}
                       </div>
 
-                      {item.explanation && (
+                      {isMapped && item.mapping_basis ? (
+                        <div className="text-[11px] font-mono text-charcoal-muted">
+                          Basis: <span className="font-semibold text-charcoal">{item.mapping_basis}</span>
+                        </div>
+                      ) : item.explanation ? (
                         <p className="text-xs text-charcoal-muted leading-relaxed line-clamp-2">
                           {item.explanation}
                         </p>
-                      )}
+                      ) : null}
 
                       <div className="flex items-center justify-between text-[11px] font-mono text-charcoal-caption pt-1 border-t border-border/40">
                         <span className="truncate max-w-[120px]">
@@ -409,6 +487,7 @@ export const ReviewPage: React.FC = () => {
                 })
               )}
             </div>
+
           </div>
 
           {/* RIGHT PANE: Decision Workbench (Consumes all remaining width) */}
@@ -455,8 +534,32 @@ export const ReviewPage: React.FC = () => {
                   </button>
                 </div>
 
+                {/* Mapped State Highlight Banner */}
+                {selectedItem.mapping_status === 'MAPPED' && (
+                  <div className="rounded-panel border border-semantic-same-border bg-semantic-same-bg p-4 flex flex-wrap items-center justify-between gap-3 text-body-sm text-semantic-same-text shadow-xs">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <CheckCircle2 className="w-5 h-5 shrink-0 text-semantic-same-text" />
+                      <span className="font-bold text-sm tracking-wide">MAPPED RECORD</span>
+                      {selectedItem.national_material_code && (
+                        <span className="font-mono text-xs bg-surface px-2 py-0.5 rounded-badge border border-semantic-same-border text-charcoal font-semibold">
+                          {selectedItem.national_material_code}
+                        </span>
+                      )}
+                      {selectedItem.mapping_basis && (
+                        <span className="text-xs text-charcoal font-mono bg-surface/80 px-2 py-0.5 rounded-badge border border-border">
+                          Basis: <strong className="text-charcoal">{selectedItem.mapping_basis}</strong>
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-charcoal-muted">
+                      Active National Material mapping established
+                    </span>
+                  </div>
+                )}
+
                 {/* 1. MATCH DECISION & BACKEND EXPLANATION CARD */}
                 <div className="p-4 rounded-panel border border-border bg-surface shadow-xs space-y-3">
+
 
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 pb-3">
                     <div className="flex items-center gap-2.5">

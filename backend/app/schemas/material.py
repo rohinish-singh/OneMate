@@ -21,8 +21,12 @@ class MaterialListResponse(BaseModel):
     source_description: str
     category: Optional[str] = None
     normalized_description: Optional[str] = None
+    mapping_status: Optional[str] = None
+    national_material_code: Optional[str] = None
+    national_material_id: Optional[uuid.UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
+
 
 
 class MaterialDetailResponse(BaseModel):
@@ -47,10 +51,15 @@ class MaterialDetailResponse(BaseModel):
     normalized_description: Optional[str] = None
     normalized_attributes: Optional[Any] = None
 
+    mapping_status: Optional[str] = None
+    national_material_code: Optional[str] = None
+    national_material_id: Optional[uuid.UUID] = None
+
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class MaterialMappingHistory(BaseModel):
     id: uuid.UUID
