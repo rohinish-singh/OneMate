@@ -5,6 +5,9 @@ All configuration comes from environment variables / .env file.
 No secrets are hardcoded.
 """
 
+from typing import Any
+
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,7 +31,37 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
 
     # --- Security ---
-    reviewer_token: str
+    reviewer_tokens_raw: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("REVIEWER_TOKENS", "reviewer_tokens"),
+    )
+    reviewer_token: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("REVIEWER_TOKEN", "reviewer_token"),
+    )
+
+    @staticmethod
+    def _parse_reviewer_tokens(*token_sources: str | None) -> list[str]:
+        tokens: list[str] = []
+        for token_source in token_sources:
+            if not token_source:
+                continue
+            for token in token_source.split(","):
+                cleaned = token.strip()
+                if cleaned:
+                    tokens.append(cleaned)
+
+        unique_tokens: list[str] = []
+        seen: set[str] = set()
+        for token in tokens:
+            if token not in seen:
+                seen.add(token)
+                unique_tokens.append(token)
+        return unique_tokens
+
+    @property
+    def reviewer_tokens(self) -> list[str]:
+        return self._parse_reviewer_tokens(self.reviewer_tokens_raw, self.reviewer_token)
 
     # --- CORS ---
     # Comma-separated string in env; parsed into a list.

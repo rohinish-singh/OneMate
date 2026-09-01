@@ -1,9 +1,36 @@
-from app.core.config import settings
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 import pytest
 import uuid
-from fastapi.testclient import TestClient
 
+from app.api.deps import get_current_reviewer
+from app.core.config import Settings, settings
 from app.models import CPSE, Material, MatchRecommendation, NationalMaterial, MaterialNationalMapping, AuditLog
+
+def test_get_current_reviewer_accepts_configured_tokens(monkeypatch):
+    monkeypatch.setattr(settings, "reviewer_tokens_raw", "token_a, token_b , ,token_c")
+    monkeypatch.setattr(settings, "reviewer_token", None)
+
+    assert settings.reviewer_tokens == ["token_a", "token_b", "token_c"]
+    assert get_current_reviewer("token_a") == "human_reviewer"
+    assert get_current_reviewer("token_b") == "human_reviewer"
+
+    with pytest.raises(HTTPException) as exc:
+        get_current_reviewer("invalid-token")
+    assert exc.value.status_code == 401
+
+    with pytest.raises(HTTPException) as exc:
+        get_current_reviewer("")
+    assert exc.value.status_code == 401
+
+
+def test_get_current_reviewer_supports_legacy_single_token(monkeypatch):
+    monkeypatch.setattr(settings, "reviewer_tokens_raw", None)
+    monkeypatch.setattr(settings, "reviewer_token", "legacy-token")
+
+    assert settings.reviewer_tokens == ["legacy-token"]
+    assert get_current_reviewer("legacy-token") == "human_reviewer"
+
 
 @pytest.fixture
 def test_cpse(db):
