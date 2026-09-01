@@ -19,19 +19,19 @@ def get_review_queue(db: Session, limit: int = 150) -> List[Dict[str, Any]]:
     if not recs:
         return []
 
-    src_ids = [rec.source_material_id for rec in recs]
+    rec_ids = [rec.id for rec in recs]
     mappings = db.query(
-        MaterialNationalMapping.material_id,
+        MaterialNationalMapping.recommendation_id,
         MaterialNationalMapping.basis,
         NationalMaterial.id.label("nm_id"),
         NationalMaterial.national_code
     ).join(
         NationalMaterial, MaterialNationalMapping.national_material_id == NationalMaterial.id
     ).filter(
-        MaterialNationalMapping.material_id.in_(src_ids),
+        MaterialNationalMapping.recommendation_id.in_(rec_ids),
         MaterialNationalMapping.status == "ACTIVE"
     ).all()
-    mapping_dict = {row.material_id: (row.national_code, row.nm_id, row.basis) for row in mappings}
+    mapping_dict = {row.recommendation_id: (row.national_code, row.nm_id, row.basis) for row in mappings}
 
     queue = []
     for rec in recs:
@@ -39,8 +39,8 @@ def get_review_queue(db: Session, limit: int = 150) -> List[Dict[str, Any]]:
         if not src:
             continue
 
-        if rec.source_material_id in mapping_dict:
-            nm_code, nm_id, basis = mapping_dict[rec.source_material_id]
+        if rec.id in mapping_dict:
+            nm_code, nm_id, basis = mapping_dict[rec.id]
             m_status = "MAPPED"
         elif rec.classification == "POTENTIALLY_EQUIVALENT":
             nm_code, nm_id, basis = None, None, None
@@ -108,27 +108,70 @@ def process_review_action(
     nm = None
 
     if action == "ACCEPT":
-        # Ensure identity is complete
-        identity_key = get_identity_key(src)
-        if not identity_key:
-            raise ValueError("Cannot ACCEPT: source material has incomplete identity. Use OVERRIDE to map to a specific NationalMaterial.")
+        # 1. Check for attribute conflicts and asymmetric missing information
+        identity_attrs = [
+            "category",
+            "valve_type",
+            "size",
+            "body_material",
+            "pressure_class",
+            "connection_type",
+            "trim",
+            "normalized_uom"
+        ]
 
-        # Re-use or Create NM (same logic as P3)
+        conflicts = []
+        asymmetric_missing = []
+
+        for attr in identity_attrs:
+            val_src = getattr(src, attr)
+            val_cand = getattr(cand, attr)
+            if val_src is not None and val_cand is not None:
+                if val_src != val_cand:
+                    conflicts.append(f"{attr} conflict: {val_src} vs {val_cand}")
+            elif val_src is not None and val_cand is None:
+                asymmetric_missing.append(f"{attr} missing on candidate")
+            elif val_src is None and val_cand is not None:
+                asymmetric_missing.append(f"{attr} missing on source")
+
+        if conflicts:
+            raise ValueError(f"Cannot ACCEPT: conflicting attributes ({'; '.join(conflicts)}).")
+
+        if asymmetric_missing:
+            raise ValueError(f"Cannot ACCEPT: asymmetric missing attributes ({'; '.join(asymmetric_missing)}). Use OVERRIDE to map to a specific NationalMaterial.")
+
+        # Construct identity_key for NationalMaterial
+        # If any attribute is None (e.g. trim is None on both), represent it deterministically as UNKNOWN
+        identity_key = "|".join(str(getattr(src, a) if getattr(src, a) is not None else "UNKNOWN") for a in identity_attrs)
+
+        # Re-use or Create NM
         nm = db.query(NationalMaterial).filter_by(identity_key=identity_key).first()
         if not nm:
+            canonical_desc_parts = [
+                src.valve_type,
+                "VALVE",
+                src.size,
+                src.body_material,
+                src.pressure_class,
+                src.connection_type
+            ]
+            if src.trim and src.trim != "UNKNOWN":
+                canonical_desc_parts.append(f"{src.trim} TRIM")
+            canonical_desc = " ".join(p for p in canonical_desc_parts if p)
+
             nm = NationalMaterial(
                 id=uuid.uuid4(),
                 national_code=f"NM-{uuid.uuid4().hex[:8].upper()}",
                 identity_key=identity_key,
-                canonical_description=generate_canonical_desc(src),
-                category=src.category,
-                valve_type=src.valve_type,
-                size=src.size,
-                body_material=src.body_material,
-                pressure_class=src.pressure_class,
-                connection_type=src.connection_type,
-                trim=src.trim,
-                normalized_uom=src.normalized_uom,
+                canonical_description=canonical_desc,
+                category=src.category or "VALVE",
+                valve_type=src.valve_type or "UNKNOWN",
+                size=src.size or "UNKNOWN",
+                body_material=src.body_material or "UNKNOWN",
+                pressure_class=src.pressure_class or "UNKNOWN",
+                connection_type=src.connection_type or "UNKNOWN",
+                trim=src.trim or "UNKNOWN",
+                normalized_uom=src.normalized_uom or "EACH",
                 status="ACTIVE"
             )
             db.add(nm)
