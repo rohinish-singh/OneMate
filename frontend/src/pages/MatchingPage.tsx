@@ -11,6 +11,8 @@ import {
   ChevronRight,
   FileCode,
   Sparkles,
+  ShieldCheck,
+  CheckSquare,
 } from 'lucide-react';
 import { api, ApiClientError } from '../api/client';
 import type {
@@ -172,8 +174,11 @@ export const MatchingPage: React.FC = () => {
   const getClassificationBadgeVariant = (classification: string): BadgeVariant => {
     switch (classification.toUpperCase()) {
       case 'SAME':
+      case 'MAPPED':
         return 'same';
       case 'POTENTIALLY_EQUIVALENT':
+      case 'POTENTIAL':
+      case 'NEEDS REVIEW':
         return 'potential';
       case 'DIFFERENT':
         return 'diff';
@@ -198,16 +203,16 @@ export const MatchingPage: React.FC = () => {
     return (
       <div className="p-8 max-w-7xl w-full mx-auto space-y-6">
         <div>
-          <h1 className="text-page-title text-charcoal">Matching Workspace</h1>
+          <h1 className="text-page-title text-charcoal">Investigate Material Matches</h1>
           <p className="text-body text-charcoal-muted mt-1">
-            Compare material recommendations
+            Advanced diagnostic workspace for evaluating deterministic recommendation evidence
           </p>
         </div>
 
         <EmptyState
           icon={<Building2 className="w-5 h-5" />}
           title="No CPSE selected"
-          description="Choose a CPSE from the directory to begin matching."
+          description="Choose a CPSE from the directory to begin investigation."
           action={
             <button
               type="button"
@@ -223,14 +228,17 @@ export const MatchingPage: React.FC = () => {
     );
   }
 
+  const isSourceMapped = sourceDetail?.mapping_status === 'MAPPED';
+  const nationalMaterialCode = sourceDetail?.national_material_code;
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6 flex flex-col min-h-[calc(100vh-4rem)]">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
         <div>
-          <h1 className="text-page-title text-charcoal">Matching Workspace</h1>
+          <h1 className="text-page-title text-charcoal">Investigate Material Matches</h1>
           <p className="text-body text-charcoal-muted mt-1">
-            {selectedCpse.name}{' '}
+            Diagnostic investigation for {selectedCpse.name}{' '}
             <span className="font-mono text-xs text-charcoal-muted bg-surface-secondary px-1.5 py-0.5 rounded-badge border border-border">
               {selectedCpse.code}
             </span>
@@ -286,7 +294,7 @@ export const MatchingPage: React.FC = () => {
         />
       ) : (
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start min-h-[560px]">
-          {/* LEFT COLUMN: Source Selector & Recommendations List (5 cols) */}
+          {/* LEFT COLUMN: Source Selector & Recommendations List (4 cols) */}
           <div className="lg:col-span-4 space-y-6 flex flex-col">
             {/* 1. Source Material Selector Panel */}
             <div className="rounded-panel border border-border bg-surface overflow-hidden shadow-xs flex flex-col">
@@ -484,7 +492,118 @@ export const MatchingPage: React.FC = () => {
               />
             ) : (
               <div className="space-y-6">
-                {/* 1. MATCH DECISION & BACKEND EXPLANATION CARD */}
+                {/* 1. OPERATIONAL OUTCOME & GOVERNANCE NAVIGATION CARD */}
+                {isSourceMapped ? (
+                  <div className="p-4 rounded-panel border border-semantic-same-border bg-semantic-same-bg shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="same" className="font-semibold text-xs">
+                          MAPPED
+                        </Badge>
+                        {selectedRec.confidence !== null && (
+                          <span className="font-mono text-xs font-bold text-semantic-same-text">
+                            {Math.round(selectedRec.confidence * 100)}% Match
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-body-sm text-semantic-same-text font-medium">
+                        Active National Material mapping established in catalog.
+                      </p>
+                      {nationalMaterialCode && (
+                        <div className="flex items-center gap-2 pt-1 text-xs">
+                          <span className="text-charcoal-muted">National Material:</span>
+                          <span className="font-mono font-bold text-brand bg-surface px-2 py-0.5 rounded-badge border border-semantic-same-border">
+                            {nationalMaterialCode}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/national-materials')}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-input bg-surface border border-semantic-same-border text-charcoal text-body-sm font-semibold hover:bg-surface-secondary transition-colors shrink-0 shadow-xs"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-brand" />
+                      <span>View National Material</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-charcoal-caption" />
+                    </button>
+                  </div>
+                ) : selectedRec.classification === 'POTENTIALLY_EQUIVALENT' ? (
+                  <div className="p-4 rounded-panel border border-semantic-potential-border bg-semantic-potential-bg shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="potential" className="font-semibold text-xs">
+                          POTENTIALLY_EQUIVALENT
+                        </Badge>
+                        {selectedRec.confidence !== null && (
+                          <span className="font-mono text-xs font-bold text-semantic-potential-text">
+                            {Math.round(selectedRec.confidence * 100)}% Match
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-body-sm text-semantic-potential-text font-medium">
+                        Unresolved candidate match requires human review and governance.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/review?cpseId=${selectedCpse.id}`)}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-input bg-surface border border-semantic-potential-border text-charcoal text-body-sm font-semibold hover:bg-surface-secondary transition-colors shrink-0 shadow-xs"
+                    >
+                      <CheckSquare className="w-4 h-4 text-semantic-potential-text" />
+                      <span>Open Review Queue</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-charcoal-caption" />
+                    </button>
+                  </div>
+                ) : selectedRec.classification === 'DIFFERENT' ? (
+                  <div className="p-4 rounded-panel border border-semantic-diff-border bg-semantic-diff-bg shadow-xs space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="diff" className="font-semibold text-xs">
+                          DIFFERENT
+                        </Badge>
+                        {selectedRec.confidence !== null && (
+                          <span className="font-mono text-xs font-bold text-semantic-diff-text">
+                            {Math.round(selectedRec.confidence * 100)}% Confidence
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs font-medium text-charcoal-caption">No Harmonization Required</span>
+                    </div>
+                    <p className="text-body-sm text-semantic-diff-text font-medium">
+                      Classified as distinct engineering material.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-panel border border-border bg-surface-secondary/40 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="same" className="font-semibold text-xs">
+                          SAME
+                        </Badge>
+                        {selectedRec.confidence !== null && (
+                          <span className="font-mono text-xs font-bold text-charcoal">
+                            {Math.round(selectedRec.confidence * 100)}% Match
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-body-sm text-charcoal font-medium">
+                        High-confidence candidate match identified.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/review?cpseId=${selectedCpse.id}`)}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-input bg-surface border border-border text-charcoal text-body-sm font-semibold hover:bg-surface-secondary transition-colors shrink-0 shadow-xs"
+                    >
+                      <CheckSquare className="w-4 h-4 text-charcoal" />
+                      <span>Open Review Queue</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-charcoal-caption" />
+                    </button>
+                  </div>
+                )}
+
+                {/* 2. MATCH DECISION & BACKEND EXPLANATION CARD */}
                 <div className="p-4 rounded-panel border border-border bg-surface shadow-xs space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 pb-3">
                     <div className="flex items-center gap-2.5">
@@ -516,6 +635,7 @@ export const MatchingPage: React.FC = () => {
                     </div>
                   )}
                 </div>
+
 
                 {/* 2. SIDE-BY-SIDE ENTITY SUMMARY HEADERS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

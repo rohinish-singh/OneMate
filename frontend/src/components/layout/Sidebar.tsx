@@ -19,11 +19,12 @@ export interface NavItem {
 export const navItems: NavItem[] = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { name: 'CPSEs', path: '/cpses', icon: Building2 },
-  { name: 'Matching', path: '/matching', icon: GitCompare },
   { name: 'Review Queue', path: '/review', icon: CheckSquare },
   { name: 'National Materials', path: '/national-materials', icon: ShieldCheck },
   { name: 'Audit Trail', path: '/audit', icon: History },
+  { name: 'Matching', path: '/matching', icon: GitCompare },
 ];
+
 
 export const Sidebar: React.FC = () => {
   return (
