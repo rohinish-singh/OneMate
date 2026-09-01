@@ -150,14 +150,14 @@ matter how high.
 
 ```text
 ┌─────────────────────────────────────────┐
-│              Frontend                    │
-│      React + TypeScript + Vite           │
-└───────────────────┬───────────────────────┘
+│              Frontend                   │
+│      React + TypeScript + Vite          │
+└───────────────────┬─────────────────────┘
                     │ REST
                     ▼
-┌─────────────────────────────────────────┐
+┌────────────────────────────────────────-─┐
 │            FastAPI Backend               │
-│                                           │
+│                                          │
 │  CPSE Management                         │
 │        │                                 │
 │        ▼                                 │
@@ -179,7 +179,7 @@ matter how high.
 │               │                          │
 │               ▼                          │
 │           Audit Trail                    │
-└───────────────────┬───────────────────────┘
+└───────────────────┬──────────────────────┘
                     ▼
                PostgreSQL
 ```
@@ -192,7 +192,7 @@ in the core matching path.
 
 ## Tech Stack
 
-| Layer      | Technology          |
+| Layer      | Technology           |
 | ---------- | -------------------- |
 | Frontend   | React + TypeScript   |
 | Build      | Vite                 |
@@ -396,7 +396,7 @@ Corporation Limited (CPCL)
 
 ## Team
 
-| Member   | Role                                 |
+| Member   | Role                                  |
 | -------- | ------------------------------------- |
 | Rohinish | Backend, Architecture & Integration   |
 | Dhruv    | Frontend / Product                    |
