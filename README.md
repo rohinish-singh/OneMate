@@ -1,327 +1,353 @@
-
-````markdown
 # OneMate
 
-### AI-Assisted CPSE Material Harmonization Platform
+### AI-Driven Standardization & Harmonization of Material Codes Across CPSEs
 
-OneMate is an AI-assisted material harmonization platform designed to help
-Central Public Sector Enterprises (CPSEs) standardize and consolidate
-engineering material data into unified National Materials.
+**Smart India Hackathon 2026** · SIH26099 · Smart Automation · Software
 
-It takes inconsistent material descriptions from different CPSEs, extracts
-technical attributes, identifies potential equivalents, safely automates
-high-confidence harmonization, and sends uncertain cases to human reviewers.
+OneMate converts fragmented CPSE material data into a governed national
+catalog — while preserving engineering identity, source provenance, human
+decisions, and audit history.
+
+[Problem](#the-problem) ·
+[Solution](#solution) ·
+[How It Works](#how-it-works) ·
+[Architecture](#architecture) ·
+[API Surface](#api-surface) ·
+[Status](#current-status) ·
+[Getting Started](#getting-started)
 
 ---
 
-## Problem
+## The Problem
 
-Different CPSEs often maintain their own material descriptions, codes,
-units, and naming conventions for technically identical or similar
-materials.
-
-For example:
+Across CPSEs, the same engineering material can be represented in completely
+different ways:
 
 ```text
-CPSE A:
-BALL VALVE 2 IN CS CLASS300 RF SS304 TRIM
+BALL VALVE 2" CL300 RF CS SS304
+BALL VLV DN50 CLASS 300 RF CARBON STEEL
+2 IN BALL VALVE 300 LB RAISED FACE CS
+```
 
-CPSE B:
-VALVE, BALL, 2 INCH, CARBON STEEL, CLASS 300, RF, SS304
-````
+These descriptions may refer to the same material. But a harmonization
+system cannot rely on textual similarity alone — a single changed technical
+attribute can mean a genuinely different engineering item:
 
-These may represent the same engineering material despite differences in
-formatting and description.
+```text
+CLASS150  ≠  CLASS300
+DN50      ≠  DN100
+BALL      ≠  GATE
+RF        ≠  SOCKET_WELD
+SS304     ≠  SS316
+```
 
-Without harmonization, organizations can face:
+The real challenge:
 
-* duplicate material records
-* inconsistent descriptions
-* fragmented procurement data
-* difficulty identifying common materials
-* unnecessary manual review
-* unreliable material mapping
-
-OneMate addresses this through a controlled matching and governance
-pipeline.
+> How do we standardize material descriptions across enterprises without
+> losing engineering meaning or creating unsafe mappings?
 
 ---
 
 ## Solution
 
-OneMate follows a simple pipeline:
+OneMate provides a governed workflow for moving source material catalogs
+from multiple CPSEs into a common National Material registry.
 
 ```text
-CPSE Material Data
-        ↓
-Validation & Ingestion
-        ↓
-Normalization
-        ↓
-Candidate Generation
-        ↓
-Material Matching
-        ↓
-SAME / POTENTIALLY_EQUIVALENT / DIFFERENT
-        ↓
-Safe Automatic Harmonization
-        ↓
-Human Review for Uncertain Cases
-        ↓
-National Material Mapping
-        ↓
-Audit Trail
+CPSE SOURCE DATA
+      │
+      ▼
+   IMPORT
+      │
+      ▼
+ NORMALIZATION
+      │
+      ▼
+   MATCHING
+ ┌────┼────┐
+ ▼    ▼    ▼
+SAME POTENTIAL DIFFERENT
+ │    │
+ ▼    ▼
+HARMONIZE REVIEW
+ │    │
+ └─┬──┘
+   ▼
+NATIONAL MATERIAL
+   │
+   ▼
+AUDIT TRAIL
+   │
+   ▼
+DASHBOARD
 ```
 
-The system is designed around an important principle:
+Core design principle:
 
-> **Be aggressive in finding plausible candidates, but conservative in
-> declaring SAME.**
+> Similarity can suggest. Engineering rules decide. Humans govern
+> uncertainty.
+
+### Why it's built this way
+
+- **Engineering-first** — identity comes from structured technical
+  attributes, not text similarity alone.
+- **Safety-first** — a hard technical conflict always overrides a high
+  similarity score.
+- **Human-in-the-loop** — uncertain matches are surfaced for review, never
+  silently mapped.
+- **Traceable** — the original uploaded row is preserved alongside
+  normalized values.
+- **Auditable** — every governance decision is recorded with actor, reason,
+  and before/after state.
+- **Minimal infrastructure** — a conventional relational architecture; no
+  vector databases, queues, or external AI APIs for the MVP.
 
 ---
 
-## Key Features
+## How It Works
 
-### Material Ingestion
+**1. Register a CPSE** — create the enterprise source namespace for a
+catalog.
 
-Import CPSE material data through CSV/XLSX files.
+**2. Import Materials** — upload a CPSE material catalog as CSV or XLSX.
+OneMate preserves the source material code, description, UOM,
+specifications, and raw source payload, separately from anything derived
+from it.
 
-The ingestion layer validates required fields and preserves the original
-source information.
+**3. Normalize** — descriptions are converted into structured attributes:
+valve type, size, body material, pressure class, connection type, trim,
+UOM. Missing information stays missing — `NULL` is unknown, never a
+wildcard.
 
-### Deterministic Normalization
+**4. Match** — materials are compared against candidates and classified as
+`SAME`, `POTENTIALLY_EQUIVALENT`, or `DIFFERENT`, each with evidence,
+confidence, and an explanation.
 
-Converts inconsistent material descriptions into standardized attributes
-such as:
+**5. Harmonize** — complete, safe `SAME` matches map automatically to an
+existing or newly created National Material, so equivalent materials from
+different CPSEs converge on one canonical identity.
 
-* Valve Type
-* Size
-* Body Material
-* Pressure Class
-* Connection Type
-* Trim
-* UOM
+**6. Human Review** — uncertain recommendations enter a review queue.
+Reviewers can accept, reject, mark different, or override — with a reason
+required for anything that contradicts the AI's evidence.
 
-Example:
+**7. Audit** — every material operation and governance decision is
+recorded: actor, action, entity, reason, before state, after state,
+timestamp.
 
-```text
-2 IN → DN50
-CS → CARBON_STEEL
-EA / NOS / PCS → EACH
-150# → CLASS150
-```
+### Matching safety
 
-Original source values remain preserved.
-
-### Intelligent Material Matching
-
-Materials are classified into:
-
-```text
-SAME
-POTENTIALLY_EQUIVALENT
-DIFFERENT
-```
-
-The current backend contains a deterministic matching baseline. The AI/ML
-component can improve upon this baseline while preserving the system's
-technical safety rules.
-
-### Hard Technical Conflict Protection
-
-Known technical conflicts override textual similarity.
-
-Examples:
-
-```text
-CLASS150 vs CLASS300
-        → DIFFERENT
-
-DN50 vs DN100
-        → DIFFERENT
-
-BALL vs GATE
-        → DIFFERENT
-
-RF vs SOCKET_WELD
-        → DIFFERENT
-```
-
-### Missing Data Safety
-
-Missing attributes are treated as unknown.
-
-They are never treated as wildcards and are never automatically inferred
-just to increase similarity.
-
-For example:
-
-```text
-Known trim: SS304
-Missing trim: NULL
-        ↓
-POTENTIALLY_EQUIVALENT
-        ↓
-Human Review
-```
-
-### Automatic Harmonization
-
-Only complete, high-confidence `SAME` matches can be automatically mapped
-to a National Material.
-
-Incomplete identities are deliberately prevented from automatic
-harmonization.
-
-### Human Review
-
-Uncertain cases can be reviewed using:
-
-* ACCEPT
-* REJECT
-* MARK_DIFFERENT
-* OVERRIDE
-
-Human decisions are recorded with reasons where required.
-
-### Auditability
-
-Important system and reviewer actions are recorded through a unified
-audit trail.
-
-This preserves:
-
-* who performed an action
-* what action occurred
-* affected entity
-* previous state
-* resulting state
-* timestamp
-* review reasoning
+`BALL VALVE DN50 CLASS150` and `BALL VALVE DN50 CLASS300` can be lexically
+and semantically almost identical — but the pressure class differs, so the
+result is `DIFFERENT`, unconditionally. The same holds for `SS304` vs.
+`SS316`, `DN50` vs. `DN100`, `BALL` vs. `GATE`, `RF` vs. `SOCKET_WELD`. A
+hard technical conflict is never overridden by a similarity score, no
+matter how high.
 
 ---
 
 ## Architecture
 
-OneMate uses a modular monolithic architecture for the MVP.
-
 ```text
-React Frontend
-       ↓
-FastAPI Backend
-       ↓
-┌─────────────────────────────┐
-│ Ingestion                   │
-│ Normalization               │
-│ Matching                    │
-│ Harmonization               │
-│ Human Review                │
-└─────────────────────────────┘
-       ↓
-PostgreSQL
+┌─────────────────────────────────────────┐
+│              Frontend                    │
+│      React + TypeScript + Vite           │
+└───────────────────┬───────────────────────┘
+                    │ REST
+                    ▼
+┌─────────────────────────────────────────┐
+│            FastAPI Backend               │
+│                                           │
+│  CPSE Management                         │
+│        │                                 │
+│        ▼                                 │
+│  Material Ingestion                      │
+│        │                                 │
+│        ▼                                 │
+│  Normalization                           │
+│        │                                 │
+│        ▼                                 │
+│  Deterministic Matching                  │
+│        │                                 │
+│        ├──────────────┐                  │
+│        ▼              ▼                  │
+│  Harmonization    Human Review           │
+│        │              │                  │
+│        └──────┬───────┘                  │
+│               ▼                          │
+│       National Materials                 │
+│               │                          │
+│               ▼                          │
+│           Audit Trail                    │
+└───────────────────┬───────────────────────┘
+                    ▼
+               PostgreSQL
 ```
 
-The MVP intentionally avoids unnecessary distributed infrastructure.
-
-No:
-
-* Kafka
-* Redis
-* Celery
-* microservices
-* vector database
-* ML microservice
-* complex workflow engine
+The MVP deliberately avoids infrastructure it doesn't need: no Redis, no
+Celery, no vector database, no background workers, no external LLM calls
+in the core matching path.
 
 ---
 
-## Technology Stack
+## Tech Stack
+
+| Layer      | Technology          |
+| ---------- | -------------------- |
+| Frontend   | React + TypeScript   |
+| Build      | Vite                 |
+| Styling    | Tailwind CSS         |
+| Backend    | FastAPI              |
+| ORM        | SQLAlchemy           |
+| Database   | PostgreSQL           |
+| Validation | Pydantic             |
+| Testing    | Pytest               |
+
+---
+
+## API Surface
+
+```http
+# CPSE
+POST   /api/v1/cpses
+GET    /api/v1/cpses
+GET    /api/v1/cpses/{cpse_id}/materials
+
+# Materials
+POST   /api/v1/materials/import
+GET    /api/v1/materials/{material_id}
+POST   /api/v1/materials/{material_id}/normalize
+POST   /api/v1/materials/{material_id}/match
+POST   /api/v1/materials/{material_id}/harmonize
+GET    /api/v1/materials/{material_id}/mapping-history
+
+# Review
+GET    /api/v1/reviews/queue
+POST   /api/v1/reviews/{recommendation_id}/action
+
+# National Materials
+GET    /api/v1/national-materials
+GET    /api/v1/national-materials/{national_material_id}
+
+# Audit
+GET    /api/v1/audit
+
+# Dashboard
+GET    /api/v1/dashboard
+```
+
+See `docs/FRONTEND_API_CONTRACT.md` for request/response schemas.
+
+---
+
+## Demo Dataset
+
+Synthetic fixtures live in `backend/tests/demo_data/` (`cpse_a.csv`,
+`cpse_b.csv`, `cpse_c.csv`). They're built to exercise: equivalent
+descriptions, formatting and abbreviation differences, missing attributes,
+and deliberate hard conflicts (pressure class, size, valve type, connection
+type, trim).
+
+> The included material data is synthetic and used for demonstration and
+> testing — it is not real CPSE data.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+Python 3.x · Node.js · npm · PostgreSQL
 
 ### Backend
 
-* Python
-* FastAPI
-* SQLAlchemy
-* PostgreSQL
-* Pydantic
-* pytest
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
 
-### AI/ML
+# configure DATABASE_URL, REVIEWER_TOKEN, etc. in .env
+uvicorn app.main:app --reload --port 8000
+```
 
-The MVP supports a replaceable matching intelligence layer.
+Runs at `http://localhost:8000`.
 
-The current backend provides a deterministic baseline, while the AI/ML
-team can evaluate and improve matching using suitable models and features.
+### Frontend
 
-Possible approaches include:
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-* Logistic Regression
-* Random Forest
-* XGBoost / LightGBM
-* fuzzy/text similarity features
+Runs at `http://localhost:5173`.
 
-The simplest approach that provides measurable improvement is preferred.
+### Testing
+
+```bash
+# backend
+cd backend && pytest -v
+
+# frontend
+cd frontend && npm run lint && npm run build
+```
 
 ---
 
-## AI/ML Boundary
+## Current Status
 
-The AI/ML component is recommendation-only.
+This section reflects what's actually implemented, not the target design —
+kept current as the build progresses.
 
-Conceptually:
+| Area | Status |
+| --- | --- |
+| Project foundation (FastAPI, PostgreSQL, SQLAlchemy) | ✅ Done |
+| CPSE management | ✅ Done |
+| Ingestion (CSV/XLSX, source preservation) | ✅ Done |
+| Normalization + attribute extraction (VALVE) | ✅ Done |
+| Deterministic matching (hard conflicts, 3-way classification) | ✅ Done |
+| Harmonization + National Material creation | ✅ Done |
+| Human review (accept/reject/mark different/override) | ✅ Done |
+| Audit log | ✅ Done |
+| Read APIs — material detail, national material list/detail, mapping history, audit | 🚧 In progress |
+| Dashboard / analytics endpoint | 🚧 In progress |
+| AI/ML enhancement layer (embeddings as an additional signal) | ⏳ Planned, not started |
+| Frontend | 🚧 In progress (Dhruv) |
 
-```python
-classify(material_a, material_b) -> MatchResult
-```
-
-It returns:
-
-```text
-classification
-confidence
-evidence
-explanation
-```
-
-The AI/ML component does **not** directly write to PostgreSQL.
-
-The backend remains responsible for:
-
-* database writes
-* transactions
-* National Materials
-* mappings
-* AuditLog
-* human review
-* authorization
+Update the checkboxes as each phase lands — an accurate status table is
+worth more here than a "ready for demo" banner that outruns the code.
 
 ---
 
-## Security
+## Security & Governance
 
-The MVP includes a protected reviewer boundary for human governance
-operations.
+- **Reviewer-protected actions** — review endpoints require a reviewer
+  token (`X-Reviewer-Token`), validated server-side.
+- **Source provenance** — original uploaded row data is preserved
+  separately from anything derived from it.
+- **Backend authority** — classification, national code generation, and
+  governance decisions originate from the backend only. The frontend never
+  supplies a confidence score, a threshold, or a national code.
+- **Audit preservation** — audit history is retained independently of the
+  records it describes.
 
-Protected review endpoints require the configured reviewer
-authentication header:
+---
 
-```text
-X-Reviewer-Token
-```
+## MVP Scope
 
-The actual token is configured through the backend environment and is not
-stored in the repository.
+**Included:** CPSE management, material ingestion with source preservation,
+deterministic normalization and matching, safe automatic harmonization,
+human review, National Material registry, mapping history, audit trail.
 
-Additional safeguards include:
+**Intentionally out of scope for the MVP:** procurement/financial
+analytics, vector search infrastructure, external LLM APIs, live SAP/ERP
+integration, background job infrastructure (Redis/Celery/Kafka), production
+SSO.
 
-* environment-based configuration
-* `.env` excluded from Git
-* `.env.example` containing placeholders only
-* no direct AI/ML database writes
-* validation of uploaded material data
-* source data preservation
-* protection against unsafe automatic harmonization
-* API errors that do not expose internal stack traces
+The objective isn't the largest possible platform — it's a safe,
+explainable, demonstrable core workflow. See `docs/ARCHITECTURE.md` for the
+full production design and `docs/MVP_SCOPE.md` for the exact MVP boundary.
 
 ---
 
@@ -329,245 +355,48 @@ Additional safeguards include:
 
 ```text
 onemate/
-│
-├── app/
-│   ├── api/
-│   │   └── v1/
-│   ├── services/
-│   │   ├── ingestion.py
-│   │   ├── normalization.py
-│   │   ├── matching.py
-│   │   ├── harmonization.py
-│   │   └── review.py
-│   ├── schemas/
-│   ├── models.py
-│   └── ...
-│
-├── tests/
-│   ├── demo_data/
-│   ├── test_normalization.py
-│   ├── test_matching.py
-│   ├── test_harmonization.py
-│   ├── test_review.py
-│   └── test_e2e.py
-│
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── MVP_SCOPE.md
-│   
-│ 
-│
-├── .env.example
-├── .gitignore
-└── README.md
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── db/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   └── models.py
+│   ├── alembic/
+│   ├── docs/
+│   └── tests/
+│       └── demo_data/
+├── frontend/
+│   ├── src/
+│   │   ├── api/
+│   │   ├── components/
+│   │   ├── context/
+│   │   ├── pages/
+│   │   └── types/
+│   └── package.json
+└── docs/
+    ├── ARCHITECTURE.md
+    ├── FRONTEND_API_CONTRACT.md
+    ├── FRONTEND_DESIGN.md
+    └── MVP_SCOPE.md
 ```
 
 ---
 
-## MVP Status
+## Smart India Hackathon
 
-The backend MVP has been implemented and verified.
+**Problem Statement:** SIH26099
+**Title:** AI-Driven Standardization and Harmonization of Material Codes
+Across CPSEs
+**Theme:** Smart Automation · **Category:** Software
+**Organization:** Ministry of Petroleum & Natural Gas — Chennai Petroleum
+Corporation Limited (CPCL)
 
-### Current verification
+## Team
 
-```text
-P0 Foundation                  ✓
-P1A Ingestion                 ✓
-P1B Normalization             ✓
-P2 Matching                   ✓
-P3 Harmonization              ✓
-P4 Human Review               ✓
-API Contract                  ✓
-End-to-End Verification       ✓
-```
-
-### Tests
-
-```text
-68 / 68 passing
-0 failed
-0 skipped
-```
-
-The test suite covers the complete backend flow from ingestion through
-matching, harmonization, human review, and audit behavior.
-
----
-
-## Demo Flow
-
-A typical OneMate demonstration follows:
-
-```text
-1. Upload CPSE material files
-             ↓
-2. Validate and ingest materials
-             ↓
-3. Normalize technical attributes
-             ↓
-4. Generate cross-CPSE candidates
-             ↓
-5. Match materials
-             ↓
-6. Automatically harmonize safe SAME matches
-             ↓
-7. Send uncertain cases to Review Queue
-             ↓
-8. Human accepts/rejects/overrides
-             ↓
-9. Create final National Material mapping
-             ↓
-10. Display audit history
-```
-
----
-
-## MVP Scope
-
-The current MVP intentionally focuses on the core harmonization workflow.
-
-### Included
-
-* CPSE material ingestion
-* deterministic normalization
-* technical attribute extraction
-* candidate matching
-* three-way classification
-* safe automatic harmonization
-* National Material creation/reuse
-* material mapping
-* human review
-* reviewer actions
-* audit logging
-* API contract for frontend integration
-
-### Deferred
-
-Production-scale capabilities such as:
-
-* SAP/ERP integration
-* enterprise SSO
-* advanced material lifecycle governance
-* large-scale distributed processing
-* advanced MLOps
-* automated online model training
-* large-scale vector retrieval
-* production infrastructure orchestration
-
-These are outside the current MVP scope.
-
----
-
-## Documentation
-
-Project architecture:
-
-`docs/ARCHITECTURE.md`
-
-MVP boundaries and requirements:
-
-`docs/MVP_SCOPE.md`
-
-These documents should be treated as the project's authoritative
-technical references.
-
----
-
-## Running Locally
-
-### 1. Clone
-
-```bash
-git clone <repository-url>
-cd onemate
-```
-
-### 2. Create virtual environment
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure environment
-
-Copy the example configuration:
-
-```bash
-cp .env.example .env
-```
-
-Update the local database configuration as required.
-
-### 5. Run the backend
-
-```bash
-uvicorn app.main:app --reload
-```
-
-The API will be available at:
-
-```text
-http://localhost:8000
-```
-
----
-
-## Testing
-
-Run the complete test suite:
-
-```bash
-pytest -v
-```
-
-Expected MVP baseline:
-
-```text
-68 passed
-```
-
----
-
-## Project Principle
-
-OneMate is designed around **safe automation rather than blind
-automation**.
-
-The system should automate what can be proven safely, surface uncertainty
-when information is incomplete, and keep humans in control of decisions
-that require judgment.
-
-```text
-AI recommends
-      ↓
-Backend validates
-      ↓
-Safe matches automate
-      ↓
-Uncertain cases go to humans
-      ↓
-Every important decision is auditable
-```
-
----
-
-## SIH26099
-
-OneMate is being developed as an MVP solution for **SIH26099 — Material
-Code Harmonization for CPSEs**.
-
-The implementation prioritizes:
-
-* correctness
-* explainability
-* data safety
-* controlled automation
-* human governance
-* demonstrable MVP scope
+| Member   | Role                                 |
+| -------- | ------------------------------------- |
+| Rohinish | Backend, Architecture & Integration   |
+| Dhruv    | Frontend / Product                    |
+| Shiven   | AI / Matching / Research              |
