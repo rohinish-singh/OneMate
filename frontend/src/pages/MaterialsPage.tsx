@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Sparkles,
+  GitCompare,
   AlertTriangle,
 } from 'lucide-react';
 import { api, ApiClientError } from '../api/client';
@@ -44,6 +45,12 @@ export const MaterialsPage: React.FC = () => {
   const [isNormalizing, setIsNormalizing] = useState<boolean>(false);
   const [normalizationProgress, setNormalizationProgress] = useState<{ current: number; total: number } | null>(null);
   const [normalizationStatusMessage, setNormalizationStatusMessage] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
+
+  // Matching state
+  const [isMatching, setIsMatching] = useState<boolean>(false);
+  const [matchingProgress, setMatchingProgress] = useState<{ current: number; total: number } | null>(null);
+  const [matchingStatusMessage, setMatchingStatusMessage] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
+
   const isCancelledRef = useRef<boolean>(false);
 
   const fetchMaterials = useCallback(async () => {
@@ -73,6 +80,9 @@ export const MaterialsPage: React.FC = () => {
     setIsNormalizing(false);
     setNormalizationProgress(null);
     setNormalizationStatusMessage(null);
+    setIsMatching(false);
+    setMatchingProgress(null);
+    setMatchingStatusMessage(null);
     if (selectedCpse) {
       fetchMaterials();
     } else {
@@ -106,11 +116,16 @@ export const MaterialsPage: React.FC = () => {
     (m) => m.mapping_status === 'NOT PROCESSED' || (!m.normalized_description && !m.mapping_status)
   );
 
+  const matchEligibleMaterials = materials.filter(
+    (m) => m.normalized_description && m.normalized_description.trim().length > 0
+  );
+
   const handleNormalizeMaterials = async () => {
-    if (!selectedCpse || unprocessedMaterials.length === 0 || isNormalizing) return;
+    if (!selectedCpse || unprocessedMaterials.length === 0 || isNormalizing || isMatching) return;
 
     setIsNormalizing(true);
     setNormalizationStatusMessage(null);
+    setMatchingStatusMessage(null);
     isCancelledRef.current = false;
 
     const total = unprocessedMaterials.length;
@@ -144,6 +159,50 @@ export const MaterialsPage: React.FC = () => {
         setNormalizationStatusMessage({
           type: 'warning',
           message: `Normalization completed with ${failCount} failure${failCount > 1 ? 's' : ''} (${successCount} processed successfully).`,
+        });
+      }
+    }
+  };
+
+  const handleFindMatches = async () => {
+    if (!selectedCpse || matchEligibleMaterials.length === 0 || isMatching || isNormalizing) return;
+
+    setIsMatching(true);
+    setMatchingStatusMessage(null);
+    setNormalizationStatusMessage(null);
+    isCancelledRef.current = false;
+
+    const total = matchEligibleMaterials.length;
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < total; i++) {
+      if (isCancelledRef.current) break;
+      const mat = matchEligibleMaterials[i];
+      setMatchingProgress({ current: i + 1, total });
+
+      try {
+        await api.materials.match(mat.id);
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    if (!isCancelledRef.current) {
+      await fetchMaterials();
+      setIsMatching(false);
+      setMatchingProgress(null);
+
+      if (failCount === 0) {
+        setMatchingStatusMessage({
+          type: 'success',
+          message: `Matching complete — ${successCount} material${successCount === 1 ? '' : 's'} evaluated.`,
+        });
+      } else {
+        setMatchingStatusMessage({
+          type: 'warning',
+          message: `Matching completed with ${failCount} failure${failCount > 1 ? 's' : ''} (${successCount} evaluated successfully).`,
         });
       }
     }
@@ -215,18 +274,19 @@ export const MaterialsPage: React.FC = () => {
           <button
             type="button"
             onClick={fetchMaterials}
-            disabled={loading || isNormalizing}
+            disabled={loading || isNormalizing || isMatching}
             title="Refresh material list"
             className="p-2 rounded-input border border-border bg-surface text-charcoal-muted hover:text-charcoal hover:bg-surface-secondary transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
 
+          {/* Workflow Action 1: Normalize Materials */}
           {unprocessedMaterials.length > 0 && (
             <button
               type="button"
               onClick={handleNormalizeMaterials}
-              disabled={isNormalizing || loading}
+              disabled={isNormalizing || isMatching || loading}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-input bg-brand text-white text-body-sm font-medium hover:bg-brand-hover transition-colors shadow-xs disabled:opacity-50"
             >
               <Sparkles className={`w-4 h-4 ${isNormalizing ? 'animate-spin' : ''}`} />
@@ -234,6 +294,23 @@ export const MaterialsPage: React.FC = () => {
                 {isNormalizing
                   ? `Normalizing (${normalizationProgress?.current || 0}/${normalizationProgress?.total || 0})...`
                   : `Normalize Materials (${unprocessedMaterials.length})`}
+              </span>
+            </button>
+          )}
+
+          {/* Workflow Action 2: Find Matches */}
+          {unprocessedMaterials.length === 0 && matchEligibleMaterials.length > 0 && (
+            <button
+              type="button"
+              onClick={handleFindMatches}
+              disabled={isMatching || isNormalizing || loading}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-input bg-brand text-white text-body-sm font-medium hover:bg-brand-hover transition-colors shadow-xs disabled:opacity-50"
+            >
+              <GitCompare className={`w-4 h-4 ${isMatching ? 'animate-spin' : ''}`} />
+              <span>
+                {isMatching
+                  ? `Finding Matches (${matchingProgress?.current || 0}/${matchingProgress?.total || 0})...`
+                  : `Find Matches (${matchEligibleMaterials.length})`}
               </span>
             </button>
           )}
@@ -250,7 +327,7 @@ export const MaterialsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsImportOpen(true)}
-            disabled={isNormalizing}
+            disabled={isNormalizing || isMatching}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-input border border-border bg-surface text-charcoal hover:bg-surface-secondary transition-colors shadow-xs text-body-sm font-medium disabled:opacity-50"
           >
             <Upload className="w-4 h-4" />
@@ -295,6 +372,49 @@ export const MaterialsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setNormalizationStatusMessage(null)}
+            className="text-xs font-semibold underline hover:opacity-80"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Matching Progress Notification */}
+      {isMatching && matchingProgress && (
+        <div className="rounded-panel border border-brand/30 bg-brand-tint/60 p-3.5 flex items-center justify-between gap-3 text-body-sm text-charcoal shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <RefreshCw className="w-4 h-4 text-brand animate-spin shrink-0" />
+            <span className="font-semibold">Evaluating match recommendations for {selectedCpse.name}...</span>
+            <span className="font-mono text-xs bg-surface px-2 py-0.5 rounded-badge border border-border">
+              {matchingProgress.current} of {matchingProgress.total} evaluated
+            </span>
+          </div>
+          <span className="text-xs text-charcoal-muted hidden sm:inline">
+            Executing deterministic matching algorithm
+          </span>
+        </div>
+      )}
+
+      {/* Matching Status Notification */}
+      {matchingStatusMessage && (
+        <div
+          className={`rounded-panel p-3.5 flex items-center justify-between gap-2.5 text-body-sm shadow-xs ${
+            matchingStatusMessage.type === 'success'
+              ? 'border border-semantic-same-border bg-semantic-same-bg text-semantic-same-text'
+              : 'border border-semantic-potential-border bg-semantic-potential-bg text-semantic-potential-text'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {matchingStatusMessage.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+            )}
+            <span>{matchingStatusMessage.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMatchingStatusMessage(null)}
             className="text-xs font-semibold underline hover:opacity-80"
           >
             Dismiss
