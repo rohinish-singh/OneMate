@@ -3,7 +3,6 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Building2,
-  GitCompare,
   CheckSquare,
   ShieldCheck,
   History,
@@ -22,8 +21,8 @@ export const navItems: NavItem[] = [
   { name: 'Review Queue', path: '/review', icon: CheckSquare },
   { name: 'National Materials', path: '/national-materials', icon: ShieldCheck },
   { name: 'Audit Trail', path: '/audit', icon: History },
-  { name: 'Matching', path: '/matching', icon: GitCompare },
 ];
+
 
 
 export const Sidebar: React.FC = () => {

@@ -32,7 +32,7 @@ export const MatchingPage: React.FC = () => {
   const navigate = useNavigate();
   const { selectedCpse } = useCpse();
 
-  // Source materials state
+  // Source materials state (for active CPSE investigation)
   const [materials, setMaterials] = useState<MaterialListItem[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState<boolean>(false);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export const MatchingPage: React.FC = () => {
   const [selectedSource, setSelectedSource] = useState<MaterialListItem | null>(null);
   const [sourceDetail, setSourceDetail] = useState<MaterialDetailResponse | null>(null);
 
-  // Matching execution & recommendations
+  // Matching execution & recommendations for single material
   const [matchLoading, setMatchLoading] = useState<boolean>(false);
   const [matchError, setMatchError] = useState<string | null>(null);
   const [matchResult, setMatchResult] = useState<MatchResponse | null>(null);
@@ -57,6 +57,7 @@ export const MatchingPage: React.FC = () => {
   const [showRawComparison, setShowRawComparison] = useState<boolean>(false);
 
   // 1. Fetch materials for selected CPSE
+
   const fetchMaterials = useCallback(async () => {
     if (!selectedCpse) return;
     setLoadingMaterials(true);
@@ -144,7 +145,7 @@ export const MatchingPage: React.FC = () => {
     };
   }, [selectedRec]);
 
-  // 4. Run match action
+  // 4. Run single material match action for investigation
   const handleRunMatch = async () => {
     if (!selectedSource) return;
     setMatchLoading(true);
@@ -205,14 +206,14 @@ export const MatchingPage: React.FC = () => {
         <div>
           <h1 className="text-page-title text-charcoal">Investigate Material Matches</h1>
           <p className="text-body text-charcoal-muted mt-1">
-            Advanced diagnostic workspace for evaluating deterministic recommendation evidence
+            Cross-CPSE deterministic matching engine & technical comparison workspace
           </p>
         </div>
 
         <EmptyState
           icon={<Building2 className="w-5 h-5" />}
-          title="No CPSE selected"
-          description="Choose a CPSE from the directory to begin investigation."
+          title="No CPSE selected for attribute comparison"
+          description="Choose a CPSE from the directory to inspect individual technical matches and attribute alignments."
           action={
             <button
               type="button"
@@ -238,14 +239,14 @@ export const MatchingPage: React.FC = () => {
         <div>
           <h1 className="text-page-title text-charcoal">Investigate Material Matches</h1>
           <p className="text-body text-charcoal-muted mt-1">
-            Diagnostic investigation for {selectedCpse.name}{' '}
+            Cross-CPSE diagnostic investigation for {selectedCpse.name}{' '}
             <span className="font-mono text-xs text-charcoal-muted bg-surface-secondary px-1.5 py-0.5 rounded-badge border border-border">
               {selectedCpse.code}
             </span>
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             type="button"
             onClick={fetchMaterials}
@@ -255,17 +256,21 @@ export const MatchingPage: React.FC = () => {
           >
             <RefreshCw className={`w-4 h-4 ${loadingMaterials ? 'animate-spin' : ''}`} />
           </button>
+
+          {/* Single Material Evaluation Action */}
           <button
             type="button"
             onClick={handleRunMatch}
             disabled={!selectedSource || matchLoading}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-input bg-brand text-white text-body font-medium hover:bg-brand-hover transition-colors disabled:opacity-50 shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-input bg-brand text-white text-body-sm font-medium hover:bg-brand-hover transition-colors disabled:opacity-50 shadow-xs"
           >
             <GitCompare className={`w-4 h-4 ${matchLoading ? 'animate-spin' : ''}`} />
-            <span>{matchLoading ? 'Running Match...' : 'Find Matches'}</span>
+            <span>{matchLoading ? 'Running...' : 'Match Selected'}</span>
           </button>
         </div>
       </div>
+
+
 
       {/* Main Workspace Split Layout */}
       {loadingMaterials && materials.length === 0 ? (
