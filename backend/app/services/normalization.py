@@ -46,21 +46,35 @@ def extract_trim(text: str) -> Tuple[Optional[str], str]:
     if not text:
         return None, text
 
-    # Match "... TRIM", but don't match "VALVE TRIM" (which just means the valve's trim)
+    # 1. Match "... TRIM", but don't match "VALVE TRIM" (which just means the valve's trim)
     match1 = re.search(r'\b([A-Z0-9.\-]+)\s+TRIM\b', text)
     if match1 and match1.group(1) != "VALVE":
         trim = match1.group(1)
         # Remove it from text
         new_text = text[:match1.start()] + text[match1.end():]
-        return trim, new_text
+        return trim, normalize_text(new_text)
 
-    # Match "TRIM ..."
+    # 2. Match "TRIM ..."
     match2 = re.search(r'\bTRIM\s+([A-Z0-9.\-]+)\b', text)
     if match2:
         trim = match2.group(1)
         # Remove it from text
         new_text = text[:match2.start()] + text[match2.end():]
-        return trim, new_text
+        return trim, normalize_text(new_text)
+
+    # 3. Match trailing trim grade (e.g. SS304, SS316) ONLY when a separate primary body material is also present earlier in the text
+    match_trailing = re.search(r'\b(SS304|SS316|304|316)\s*$', text)
+    if match_trailing:
+        prefix = text[:match_trailing.start()]
+        has_primary_body = bool(re.search(r'\b(CS|C\.S\.|CARBON STEEL|WCB|CAST STEEL|CAST IRON|CI|SS|STAINLESS STEEL|CF8M|CF8)\b', prefix))
+        if has_primary_body:
+            trim = match_trailing.group(1)
+            if trim == "304":
+                trim = "SS304"
+            elif trim == "316":
+                trim = "SS316"
+            new_text = prefix + text[match_trailing.end():]
+            return trim, normalize_text(new_text)
 
     return None, text
 
@@ -125,6 +139,10 @@ def extract_body_material(text: str) -> Optional[str]:
     """
     Extracts body material deterministically from remaining text.
     """
+    # Explicit carbon steel mappings have precedence if present
+    if re.search(r'\b(CS|C\.S\.|CARBON STEEL|WCB|CAST STEEL)\b', text):
+        return "CARBON_STEEL"
+
     # Explicit specific mappings
     if re.search(r'\b(SS304)\b', text):
         return "SS304"
@@ -132,12 +150,12 @@ def extract_body_material(text: str) -> Optional[str]:
         return "SS316"
 
     # Generic mappings
-    if re.search(r'\b(SS|STAINLESS STEEL)\b', text):
+    if re.search(r'\b(SS|STAINLESS STEEL|CF8M|CF8)\b', text):
         return "STAINLESS_STEEL"
-    if re.search(r'\b(CS|C\.S\.|CARBON STEEL)\b', text):
-        return "CARBON_STEEL"
 
-    # Others can be added as needed
+    if re.search(r'\b(CAST IRON|CI)\b', text):
+        return "CAST_IRON"
+
     return None
 
 def extract_connection_type(text: str) -> Optional[str]:
@@ -171,17 +189,24 @@ def normalize_material_record(db: Session, material: Material, actor: str = "sys
 
     # Extract trim first, leaving text without trim to avoid material confusion
     ext_trim, remaining_text = extract_trim(search_text)
+    ext_valve_type = extract_valve_type(search_text)
+
+    resolved_category = material.category
+    if not resolved_category and (ext_valve_type or re.search(r'\b(VALVE|VLV)\b', search_text)):
+        resolved_category = "VALVE"
 
     new_vals = {
+        "category": resolved_category,
         "normalized_description": normalize_text(material.source_description),
         "normalized_uom": normalize_uom(material.source_uom),
-        "valve_type": extract_valve_type(search_text),
+        "valve_type": ext_valve_type,
         "size": extract_size(search_text),
         "pressure_class": extract_pressure_class(search_text),
         "body_material": extract_body_material(remaining_text),
         "connection_type": extract_connection_type(search_text),
         "trim": ext_trim,
     }
+
 
     # Check if anything actually changed (idempotency)
     changed = False

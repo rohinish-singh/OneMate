@@ -210,7 +210,65 @@ def test_api_endpoint(client: TestClient, db, test_cpse):
 
     db.refresh(mat)
     assert mat.valve_type == "GATE"
+    assert mat.category == "VALVE"
 
     logs = db.query(AuditLog).filter(AuditLog.entity_id == str(mat.id)).all()
     assert len(logs) == 1
     assert logs[0].action == "NORMALIZE"
+
+def test_regression_patch_5d_case1(db, test_cpse):
+    # Case 1: BALL VALVE 2 IN CS CLASS300 RF SS304 TRIM
+    mat = Material(
+        id=uuid.uuid4(),
+        cpse_id=test_cpse.id,
+        source_material_code="CASE-1",
+        source_description="BALL VALVE 2 IN CS CLASS300 RF SS304 TRIM",
+        source_uom="EA",
+        category=None,
+        raw_source_data={"original": "BALL VALVE 2 IN CS CLASS300 RF SS304 TRIM"}
+    )
+    db.add(mat)
+    db.commit()
+
+    normalize_material_record(db, mat)
+    db.commit()
+    db.refresh(mat)
+
+    assert mat.category == "VALVE"
+    assert mat.valve_type == "BALL"
+    assert mat.size == "DN50"
+    assert mat.body_material == "CARBON_STEEL"
+    assert mat.pressure_class == "CLASS300"
+    assert mat.connection_type == "RF"
+    assert mat.trim == "SS304"
+    assert mat.normalized_uom == "EACH"
+    assert mat.normalized_description == "BALL VALVE 2 IN CS CLASS300 RF SS304 TRIM"
+
+def test_regression_patch_5d_case2(db, test_cpse):
+    # Case 2: BALL VLV DN50 CARBON STEEL CLASS 300 RF SS304
+    mat = Material(
+        id=uuid.uuid4(),
+        cpse_id=test_cpse.id,
+        source_material_code="CASE-2",
+        source_description="BALL VLV DN50 CARBON STEEL CLASS 300 RF SS304",
+        source_uom="EA",
+        category=None,
+        raw_source_data={"original": "BALL VLV DN50 CARBON STEEL CLASS 300 RF SS304"}
+    )
+    db.add(mat)
+    db.commit()
+
+    normalize_material_record(db, mat)
+    db.commit()
+    db.refresh(mat)
+
+    assert mat.category == "VALVE"
+    assert mat.valve_type == "BALL"
+    assert mat.size == "DN50"
+    assert mat.body_material == "CARBON_STEEL"
+    assert mat.pressure_class == "CLASS300"
+    assert mat.connection_type == "RF"
+    assert mat.trim == "SS304"
+    assert mat.normalized_uom == "EACH"
+    assert mat.normalized_description == "BALL VLV DN50 CARBON STEEL CLASS 300 RF SS304"
+
