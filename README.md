@@ -303,17 +303,18 @@ kept current as the build progresses.
 | Area | Status |
 | --- | --- |
 | Project foundation (FastAPI, PostgreSQL, SQLAlchemy) | ✅ Done |
-| CPSE management | ✅ Done |
+| CPSE management & controlled deletion | ✅ Done |
 | Ingestion (CSV/XLSX, source preservation) | ✅ Done |
 | Normalization + attribute extraction (VALVE) | ✅ Done |
 | Deterministic matching (hard conflicts, 3-way classification) | ✅ Done |
 | Harmonization + National Material creation | ✅ Done |
 | Human review (accept/reject/mark different/override) | ✅ Done |
-| Audit log | ✅ Done |
-| Read APIs — material detail, national material list/detail, mapping history, audit | 🚧 In progress |
-| Dashboard / analytics endpoint | 🚧 In progress |
-| AI/ML enhancement layer (embeddings as an additional signal) | ⏳ Planned, not started |
-| Frontend | 🚧 In progress (Dhruv) |
+| Audit log & immutable event trail | ✅ Done |
+| Read APIs — material detail, national material list/detail, mapping history, audit | ✅ Done |
+| Dashboard / operational analytics overview | ✅ Done |
+| Controlled CPSE and Material deletion | ✅ Done |
+| Responsive Frontend (Dashboard, Explorer, Matcher, Review, National Registry, Audit) | ✅ Done |
+
 
 Update the checkboxes as each phase lands — an accurate status table is
 worth more here than a "ready for demo" banner that outruns the code.
