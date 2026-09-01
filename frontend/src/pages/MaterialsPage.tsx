@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Package,
@@ -9,6 +9,8 @@ import {
   Check,
   CheckCircle2,
   ClipboardList,
+  Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 import { api, ApiClientError } from '../api/client';
 import type { MaterialListItem, MaterialDetailResponse } from '../types/api';
@@ -29,7 +31,6 @@ export const MaterialsPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-
   // Inspector and Import state
   const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
   const [isImportOpen, setIsImportOpen] = useState<boolean>(false);
@@ -38,6 +39,12 @@ export const MaterialsPage: React.FC = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
   const [materialToDelete, setMaterialToDelete] = useState<MaterialListItem | MaterialDetailResponse | null>(null);
   const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
+
+  // Normalization state
+  const [isNormalizing, setIsNormalizing] = useState<boolean>(false);
+  const [normalizationProgress, setNormalizationProgress] = useState<{ current: number; total: number } | null>(null);
+  const [normalizationStatusMessage, setNormalizationStatusMessage] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
+  const isCancelledRef = useRef<boolean>(false);
 
   const fetchMaterials = useCallback(async () => {
     if (!selectedCpse) return;
@@ -63,6 +70,9 @@ export const MaterialsPage: React.FC = () => {
   // Load materials when selected CPSE changes
   useEffect(() => {
     setSelectedMaterialId(null);
+    setIsNormalizing(false);
+    setNormalizationProgress(null);
+    setNormalizationStatusMessage(null);
     if (selectedCpse) {
       fetchMaterials();
     } else {
@@ -71,8 +81,13 @@ export const MaterialsPage: React.FC = () => {
     }
   }, [selectedCpse, fetchMaterials]);
 
-  const getStatusVariant = (state?: string | null) => {
+  useEffect(() => {
+    return () => {
+      isCancelledRef.current = true;
+    };
+  }, []);
 
+  const getStatusVariant = (state?: string | null) => {
     switch (state?.toUpperCase()) {
       case 'MAPPED':
         return 'same';
@@ -84,6 +99,53 @@ export const MaterialsPage: React.FC = () => {
       case 'UNMATCHED':
       default:
         return 'neutral';
+    }
+  };
+
+  const unprocessedMaterials = materials.filter(
+    (m) => m.mapping_status === 'NOT PROCESSED' || (!m.normalized_description && !m.mapping_status)
+  );
+
+  const handleNormalizeMaterials = async () => {
+    if (!selectedCpse || unprocessedMaterials.length === 0 || isNormalizing) return;
+
+    setIsNormalizing(true);
+    setNormalizationStatusMessage(null);
+    isCancelledRef.current = false;
+
+    const total = unprocessedMaterials.length;
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < total; i++) {
+      if (isCancelledRef.current) break;
+      const mat = unprocessedMaterials[i];
+      setNormalizationProgress({ current: i + 1, total });
+
+      try {
+        await api.materials.normalize(mat.id);
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    if (!isCancelledRef.current) {
+      await fetchMaterials();
+      setIsNormalizing(false);
+      setNormalizationProgress(null);
+
+      if (failCount === 0) {
+        setNormalizationStatusMessage({
+          type: 'success',
+          message: `Normalization complete — ${successCount} material${successCount === 1 ? '' : 's'} processed.`,
+        });
+      } else {
+        setNormalizationStatusMessage({
+          type: 'warning',
+          message: `Normalization completed with ${failCount} failure${failCount > 1 ? 's' : ''} (${successCount} processed successfully).`,
+        });
+      }
     }
   };
 
@@ -99,7 +161,6 @@ export const MaterialsPage: React.FC = () => {
         : 'Material deleted successfully.'
     );
   };
-
 
   const handleReviewThisCpse = () => {
     if (!selectedCpse) return;
@@ -150,34 +211,96 @@ export const MaterialsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             type="button"
             onClick={fetchMaterials}
-            disabled={loading}
+            disabled={loading || isNormalizing}
             title="Refresh material list"
             className="p-2 rounded-input border border-border bg-surface text-charcoal-muted hover:text-charcoal hover:bg-surface-secondary transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
+
+          {unprocessedMaterials.length > 0 && (
+            <button
+              type="button"
+              onClick={handleNormalizeMaterials}
+              disabled={isNormalizing || loading}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-input bg-brand text-white text-body-sm font-medium hover:bg-brand-hover transition-colors shadow-xs disabled:opacity-50"
+            >
+              <Sparkles className={`w-4 h-4 ${isNormalizing ? 'animate-spin' : ''}`} />
+              <span>
+                {isNormalizing
+                  ? `Normalizing (${normalizationProgress?.current || 0}/${normalizationProgress?.total || 0})...`
+                  : `Normalize Materials (${unprocessedMaterials.length})`}
+              </span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleReviewThisCpse}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-input border border-border bg-surface text-charcoal hover:bg-surface-secondary transition-colors shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-input border border-border bg-surface text-charcoal hover:bg-surface-secondary transition-colors shadow-xs text-body-sm font-medium"
           >
             <ClipboardList className="w-4 h-4" />
             <span>Review this CPSE</span>
           </button>
+
           <button
             type="button"
             onClick={() => setIsImportOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-input bg-brand text-white text-body font-medium hover:bg-brand-hover transition-colors shadow-xs"
+            disabled={isNormalizing}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-input border border-border bg-surface text-charcoal hover:bg-surface-secondary transition-colors shadow-xs text-body-sm font-medium disabled:opacity-50"
           >
             <Upload className="w-4 h-4" />
             <span>Import Materials</span>
           </button>
         </div>
       </div>
+
+      {/* Normalization Progress Notification */}
+      {isNormalizing && normalizationProgress && (
+        <div className="rounded-panel border border-brand/30 bg-brand-tint/60 p-3.5 flex items-center justify-between gap-3 text-body-sm text-charcoal shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <RefreshCw className="w-4 h-4 text-brand animate-spin shrink-0" />
+            <span className="font-semibold">Normalizing materials for {selectedCpse.name}...</span>
+            <span className="font-mono text-xs bg-surface px-2 py-0.5 rounded-badge border border-border">
+              {normalizationProgress.current} of {normalizationProgress.total} processed
+            </span>
+          </div>
+          <span className="text-xs text-charcoal-muted hidden sm:inline">
+            Applying deterministic engineering normalization rules
+          </span>
+        </div>
+      )}
+
+      {/* Normalization Status Notification */}
+      {normalizationStatusMessage && (
+        <div
+          className={`rounded-panel p-3.5 flex items-center justify-between gap-2.5 text-body-sm shadow-xs ${
+            normalizationStatusMessage.type === 'success'
+              ? 'border border-semantic-same-border bg-semantic-same-bg text-semantic-same-text'
+              : 'border border-semantic-potential-border bg-semantic-potential-bg text-semantic-potential-text'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {normalizationStatusMessage.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+            )}
+            <span>{normalizationStatusMessage.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNormalizationStatusMessage(null)}
+            className="text-xs font-semibold underline hover:opacity-80"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Success Notification */}
       {deleteSuccessMessage && (
@@ -195,6 +318,7 @@ export const MaterialsPage: React.FC = () => {
           </button>
         </div>
       )}
+
 
 
       {/* Main Workspace Area */}
