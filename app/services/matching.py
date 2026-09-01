@@ -46,15 +46,15 @@ def classify_match(source: Material, candidate: Material) -> Dict[str, Any]:
     missing_source = []
     missing_candidate = []
     missing_both = []
-    
+
     evidence = {"attributes": {}}
 
     for attr in ATTRIBUTES:
         val1 = getattr(source, attr)
         val2 = getattr(candidate, attr)
-        
+
         attr_ev = {"source": val1, "candidate": val2, "match": None, "weight": 0.0}
-        
+
         if val1 is not None and val2 is not None:
             if val1 == val2:
                 matches.append(attr.replace("_", " "))
@@ -70,30 +70,30 @@ def classify_match(source: Material, candidate: Material) -> Dict[str, Any]:
                 missing_source.append(attr.replace("_", " "))
             else:
                 missing_candidate.append(attr.replace("_", " "))
-                
+
         evidence["attributes"][attr] = attr_ev
-        
+
     desc_sim = calculate_text_similarity(source.normalized_description or source.source_description,
                                          candidate.normalized_description or candidate.source_description)
     evidence["description_similarity"] = round(desc_sim, 3)
-    
+
     if hard_conflicts:
         classification = "DIFFERENT"
         confidence = 0.0
         explanation = "; ".join(hard_conflicts).capitalize() + "."
     else:
         score = (len(matches) * ATTR_WEIGHT) + (desc_sim * DESC_WEIGHT)
-        
+
         # Reward exact agreement on all known identity attributes.
         # If all 6 attributes match perfectly (meaning none are missing),
         # this is a complete technical equivalent. We ensure it reaches the SAME threshold.
         if len(matches) == len(ATTRIBUTES):
             score = max(score, 0.90)
-            
+
         confidence = min(round(score, 3), 1.0)
-        
+
         # Determine classification
-        # We enforce that missing attributes intrinsically lower the score 
+        # We enforce that missing attributes intrinsically lower the score
         # (each missing attribute effectively docks 0.12 from the max 1.0).
         if confidence >= SCORE_THRESHOLD_SAME:
             if missing_source or missing_candidate or missing_both:
@@ -104,21 +104,21 @@ def classify_match(source: Material, candidate: Material) -> Dict[str, Any]:
             classification = "POTENTIALLY_EQUIVALENT"
         else:
             classification = "DIFFERENT"
-            
+
         # Formulate explanation
         parts = []
         if matches:
             parts.append(f"Same {format_list(matches)}")
-        
+
         missing_all = missing_source + missing_candidate + missing_both
         if missing_all:
             parts.append(f"missing information for {format_list(missing_all)}")
-            
+
         if not matches and not missing_all:
             explanation = "No attribute evidence available."
         else:
             explanation = "; ".join(parts).capitalize() + "."
-            
+
     return {
         "classification": classification,
         "confidence": confidence,
@@ -136,13 +136,13 @@ def generate_candidates(db: Session, source: Material) -> List[Material]:
         Material.cpse_id != source.cpse_id,
         Material.category == source.category
     )
-    
+
     # If source has a known valve type, only pull candidates with the same type or unknown type
     if source.valve_type:
         query = query.filter(
             (Material.valve_type == source.valve_type) | (Material.valve_type.is_(None))
         )
-        
+
     return query.all()
 
 def create_match_recommendations(db: Session, source_material: Material) -> List[MatchRecommendation]:
@@ -152,10 +152,10 @@ def create_match_recommendations(db: Session, source_material: Material) -> List
     """
     candidates = generate_candidates(db, source_material)
     recommendations = []
-    
+
     for cand in candidates:
         result = classify_match(source_material, cand)
-        
+
         rec = MatchRecommendation(
             source_material_id=source_material.id,
             candidate_material_id=cand.id,
@@ -166,6 +166,6 @@ def create_match_recommendations(db: Session, source_material: Material) -> List
         )
         recommendations.append(rec)
         db.add(rec)
-        
+
     db.flush()
     return recommendations

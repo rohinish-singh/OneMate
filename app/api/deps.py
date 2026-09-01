@@ -9,4 +9,3 @@ def get_current_reviewer(x_reviewer_token: str = Header(None)) -> str:
     if not x_reviewer_token or x_reviewer_token != settings.reviewer_token:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return "human_reviewer"
-

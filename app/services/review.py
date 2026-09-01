@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from app.models import (
-    Material, NationalMaterial, MatchRecommendation, 
+    Material, NationalMaterial, MatchRecommendation,
     MaterialNationalMapping, AuditLog
 )
 from app.services.harmonization import get_identity_key, generate_canonical_desc
@@ -26,7 +26,7 @@ def get_review_queue(db: Session, limit: int = 50) -> List[Dict[str, Any]]:
         src = db.get(Material, rec.source_material_id)
         if not src:
             continue
-        
+
         queue.append({
             "recommendation_id": str(rec.id),
             "source_material_id": str(rec.source_material_id),
@@ -70,7 +70,7 @@ def process_review_action(
     existing_mapping = db.query(MaterialNationalMapping).filter_by(
         material_id=src.id, status="ACTIVE"
     ).first()
-    
+
     if existing_mapping:
         raise ValueError("Material already has an ACTIVE mapping. Unmap or explicitly remap first.")
 
@@ -131,11 +131,11 @@ def process_review_action(
     elif action == "OVERRIDE":
         if not national_material_id:
             raise ValueError("OVERRIDE requires a specific national_material_id.")
-            
+
         nm = db.get(NationalMaterial, national_material_id)
         if not nm:
             raise ValueError("Target NationalMaterial does not exist.")
-            
+
         mapping = MaterialNationalMapping(
             id=uuid.uuid4(),
             material_id=src.id,

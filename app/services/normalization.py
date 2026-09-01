@@ -45,7 +45,7 @@ def extract_trim(text: str) -> Tuple[Optional[str], str]:
     """
     if not text:
         return None, text
-        
+
     # Match "... TRIM", but don't match "VALVE TRIM" (which just means the valve's trim)
     match1 = re.search(r'\b([A-Z0-9.\-]+)\s+TRIM\b', text)
     if match1 and match1.group(1) != "VALVE":
@@ -53,7 +53,7 @@ def extract_trim(text: str) -> Tuple[Optional[str], str]:
         # Remove it from text
         new_text = text[:match1.start()] + text[match1.end():]
         return trim, new_text
-        
+
     # Match "TRIM ..."
     match2 = re.search(r'\bTRIM\s+([A-Z0-9.\-]+)\b', text)
     if match2:
@@ -61,7 +61,7 @@ def extract_trim(text: str) -> Tuple[Optional[str], str]:
         # Remove it from text
         new_text = text[:match2.start()] + text[match2.end():]
         return trim, new_text
-        
+
     return None, text
 
 def extract_valve_type(text: str) -> Optional[str]:
@@ -82,12 +82,12 @@ def extract_size(text: str) -> Optional[str]:
     match_dn = re.search(r'\bDN\s*(\d+)\b', text)
     if match_dn:
         return f"DN{match_dn.group(1)}"
-        
+
     # Look for xx MM
     match_mm = re.search(r'\b(\d+)\s*MM\b', text)
     if match_mm:
         return f"DN{match_mm.group(1)}"
-        
+
     # Look for INCH / IN / "
     match_in = re.search(r'\b(\d+(?:\.\d+)?)\s*(?:IN|INCH|")\b', text)
     if match_in:
@@ -108,7 +108,7 @@ def extract_size(text: str) -> Optional[str]:
             "12": "DN300"
         }
         return inch_map.get(val, None)
-        
+
     return None
 
 def extract_pressure_class(text: str) -> Optional[str]:
@@ -130,13 +130,13 @@ def extract_body_material(text: str) -> Optional[str]:
         return "SS304"
     if re.search(r'\b(SS316)\b', text):
         return "SS316"
-        
+
     # Generic mappings
     if re.search(r'\b(SS|STAINLESS STEEL)\b', text):
         return "STAINLESS_STEEL"
     if re.search(r'\b(CS|C\.S\.|CARBON STEEL)\b', text):
         return "CARBON_STEEL"
-        
+
     # Others can be added as needed
     return None
 
@@ -166,12 +166,12 @@ def normalize_material_record(db: Session, material: Material, actor: str = "sys
     search_text = material.source_description or ""
     if material.source_specifications:
         search_text += " " + material.source_specifications
-        
+
     search_text = normalize_text(search_text)
-    
+
     # Extract trim first, leaving text without trim to avoid material confusion
     ext_trim, remaining_text = extract_trim(search_text)
-    
+
     new_vals = {
         "normalized_description": normalize_text(material.source_description),
         "normalized_uom": normalize_uom(material.source_uom),
@@ -182,12 +182,12 @@ def normalize_material_record(db: Session, material: Material, actor: str = "sys
         "connection_type": extract_connection_type(search_text),
         "trim": ext_trim,
     }
-    
+
     # Check if anything actually changed (idempotency)
     changed = False
     before_state = {}
     after_state = {}
-    
+
     for key, new_val in new_vals.items():
         old_val = getattr(material, key)
         if old_val != new_val:
@@ -195,7 +195,7 @@ def normalize_material_record(db: Session, material: Material, actor: str = "sys
             before_state[key] = old_val
             after_state[key] = new_val
             setattr(material, key, new_val)
-            
+
     if changed:
         audit_log = AuditLog(
             id=uuid.uuid4(),
@@ -210,5 +210,5 @@ def normalize_material_record(db: Session, material: Material, actor: str = "sys
         db.add(audit_log)
         db.flush()
         return audit_log
-        
+
     return None

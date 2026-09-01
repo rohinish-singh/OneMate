@@ -52,22 +52,22 @@ def test_harmonize_complete_same(db, cpse_x):
     m1 = create_mat(db, cpse_x, {"valve_type": v_type})
     m2 = create_mat(db, cpse_x, {"valve_type": v_type})
     create_rec(db, m1, m2, "SAME")
-    
+
     res = harmonize_material(db, m1)
     db.commit()
-    
+
     assert res["status"] == "success"
     assert res["national_material_action"] == "CREATED" # 1. Complete SAME -> NM created
-    
+
     nm = db.query(NationalMaterial).filter_by(id=res["national_material_id"]).first()
     assert nm is not None
     assert nm.national_code is not None # 16. National code
     assert f"{v_type} VALVE DN50 CARBON_STEEL CLASS300 RF SS304 TRIM" in nm.canonical_description # 17. Canonical desc
-    
+
     map1 = db.query(MaterialNationalMapping).filter_by(id=res["mapping_id"]).first()
     assert map1.status == "ACTIVE"
     assert map1.basis == "AUTO_SAME" # 4. ACTIVE AUTO_SAME mapping
-    
+
     # 15. AuditLog records actions
     logs = db.query(AuditLog).filter(AuditLog.action.in_(["CREATE_NATIONAL_MATERIAL", "CREATE_MAPPING"])).all()
     assert len(logs) >= 2
@@ -81,11 +81,11 @@ def test_harmonize_reuse_nm(db, cpse_x):
     m3 = create_mat(db, cpse_x, {"valve_type": v_type})
     create_rec(db, m1, m2, "SAME")
     create_rec(db, m3, m2, "SAME")
-    
+
     res1 = harmonize_material(db, m1)
     db.commit()
     assert res1["national_material_action"] == "CREATED"
-    
+
     res2 = harmonize_material(db, m3)
     db.commit()
     assert res2["national_material_action"] == "REUSED"
@@ -95,10 +95,10 @@ def test_harmonize_no_auto_map_for_potential_or_different(db, cpse_x):
     m1 = create_mat(db, cpse_x, {})
     m2 = create_mat(db, cpse_x, {})
     create_rec(db, m1, m2, "POTENTIALLY_EQUIVALENT")
-    
+
     res = harmonize_material(db, m1)
     assert res["status"] == "skipped" # 5. POTENTIALLY_EQUIVALENT -> no automatic mapping
-    
+
     m3 = create_mat(db, cpse_x, {})
     create_rec(db, m1, m3, "DIFFERENT")
     res2 = harmonize_material(db, m1)
@@ -110,12 +110,12 @@ def test_harmonize_missing_attributes(db, cpse_x):
     res = harmonize_material(db, m_no_trim)
     assert res["status"] == "skipped"
     assert "Incomplete identity" in res["reason"]
-    
+
     # 8. Missing size
     m_no_size = create_mat(db, cpse_x, {"size": None})
     res2 = harmonize_material(db, m_no_size)
     assert res2["status"] == "skipped"
-    
+
     # 9. Missing pressure class
     m_no_pc = create_mat(db, cpse_x, {"pressure_class": None})
     res3 = harmonize_material(db, m_no_pc)
@@ -127,24 +127,24 @@ def test_separate_identities(db, cpse_x):
     m_dn50 = create_mat(db, cpse_x, {"size": "DN50"})
     m_dn100 = create_mat(db, cpse_x, {"size": "DN100"})
     m_gate = create_mat(db, cpse_x, {"valve_type": "GATE"})
-    
+
     m_150_b = create_mat(db, cpse_x, {"pressure_class": "CLASS150"})
     create_rec(db, m_150, m_150_b, "SAME")
     r1 = harmonize_material(db, m_150)
-    
+
     m_300_b = create_mat(db, cpse_x, {"pressure_class": "CLASS300"})
     create_rec(db, m_300, m_300_b, "SAME")
     r2 = harmonize_material(db, m_300)
-    
+
     assert r1["national_material_id"] != r2["national_material_id"] # 11. Different classes remain separate
-    
+
     m_100_b = create_mat(db, cpse_x, {"size": "DN100"})
     create_rec(db, m_dn100, m_100_b, "SAME")
     r3 = harmonize_material(db, m_dn100)
-    
+
     # m_dn50 is practically same as m_300 depending on defaults, let's just make sure 100 is different
     assert r3["national_material_id"] != r1["national_material_id"] # 12. Different sizes remain separate
-    
+
     m_gate_b = create_mat(db, cpse_x, {"valve_type": "GATE"})
     create_rec(db, m_gate, m_gate_b, "SAME")
     r4 = harmonize_material(db, m_gate)
@@ -154,11 +154,11 @@ def test_existing_mapping_not_replaced(db, cpse_x):
     m1 = create_mat(db, cpse_x, {})
     m2 = create_mat(db, cpse_x, {})
     create_rec(db, m1, m2, "SAME")
-    
+
     res1 = harmonize_material(db, m1)
     db.commit()
     assert res1["status"] == "success"
-    
+
     # Run again, should skip
     res2 = harmonize_material(db, m1)
     assert res2["status"] == "skipped"
@@ -166,27 +166,27 @@ def test_existing_mapping_not_replaced(db, cpse_x):
 
 def test_regression_abc(db, cpse_x):
     # A: BALL / DN50 / CARBON_STEEL / CLASS300 / RF / SS304
-    a_attrs = {"valve_type": "BALL", "size": "DN50", "body_material": "CARBON_STEEL", 
+    a_attrs = {"valve_type": "BALL", "size": "DN50", "body_material": "CARBON_STEEL",
                "pressure_class": "CLASS300", "connection_type": "RF", "trim": "SS304"}
     m_a = create_mat(db, cpse_x, a_attrs)
-    
+
     # B: BALL / DN50 / CARBON_STEEL / CLASS300 / RF / SS304
     m_b = create_mat(db, cpse_x, a_attrs)
-    
+
     # C: BALL / DN50 / CARBON_STEEL / CLASS300 / RF / NULL
     c_attrs = a_attrs.copy()
     c_attrs["trim"] = None
     m_c = create_mat(db, cpse_x, c_attrs)
-    
+
     create_rec(db, m_a, m_b, "SAME")
     create_rec(db, m_b, m_a, "SAME")
     r_a = harmonize_material(db, m_a)
     r_b = harmonize_material(db, m_b)
-    
+
     assert r_a["status"] == "success"
     assert r_b["status"] == "success"
     assert r_a["national_material_id"] == r_b["national_material_id"] # A and B -> same NM
-    
+
     # Assuming M_C somehow had a SAME rec (which it shouldn't normally, but testing robustness)
     create_rec(db, m_c, m_a, "SAME")
     r_c = harmonize_material(db, m_c)
@@ -196,7 +196,7 @@ def test_api_endpoint(client: TestClient, db, cpse_x):
     m1 = create_mat(db, cpse_x, {})
     m2 = create_mat(db, cpse_x, {})
     create_rec(db, m1, m2, "SAME")
-    
+
     resp = client.post(f"/api/v1/materials/{m1.id}/harmonize")
     assert resp.status_code == 200
     data = resp.json()

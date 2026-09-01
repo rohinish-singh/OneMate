@@ -12,4 +12,3 @@ class Base(DeclarativeBase):
     """Declarative base class for all SQLAlchemy models."""
 
     pass
-

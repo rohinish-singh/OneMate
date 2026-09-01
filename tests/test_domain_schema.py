@@ -51,9 +51,9 @@ def test_material_preserves_source_fields_separately(client, db):
     db.commit()
 
     mat = Material(
-        cpse_id=cpse1.id, 
-        source_material_code="M2", 
-        source_description="ORIGINAL_DESC", 
+        cpse_id=cpse1.id,
+        source_material_code="M2",
+        source_description="ORIGINAL_DESC",
         source_uom="NOS"
     )
     # Add derived fields
@@ -215,7 +215,7 @@ def test_foreign_keys_delete_restrict(client, db):
 
 def test_critical_safety_incomplete_identity(client, db):
     """
-    Critical safety case: Material A (trim=NULL), Material B (trim=SS304), DB allows Material A. 
+    Critical safety case: Material A (trim=NULL), Material B (trim=SS304), DB allows Material A.
     But NationalMaterial must not permit incomplete identity.
     """
     cpse1 = CPSE(code=f"C-{uuid.uuid4()}", name=f"C-{uuid.uuid4()}")

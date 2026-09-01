@@ -36,6 +36,156 @@ Error responses always take the shape:
 
 ## Endpoint Inventory
 
+
+### 0. Create CPSE
+**POST** `/cpses`
+**Auth Required**: No
+
+**Request Payload:**
+```json
+{
+  "code": "CPCL-DEMO",
+  "name": "Chennai Petroleum Corporation Limited"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "code": "CPCL-DEMO",
+  "name": "Chennai Petroleum Corporation Limited",
+  "created_at": "2026-08-31T12:00:00Z",
+  "updated_at": "2026-08-31T12:00:00Z"
+}
+```
+
+
+### 0.1. List CPSEs
+**GET** `/cpses`
+**Auth Required**: No
+
+**Request Payload:** None
+
+**Response (200 OK):**
+```json
+[
+  {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "code": "CPCL-DEMO",
+    "name": "Chennai Petroleum Corporation Limited",
+    "created_at": "2026-08-31T12:00:00Z",
+    "updated_at": "2026-08-31T12:00:00Z"
+  }
+]
+```
+
+### 0.1.1. Delete CPSE
+**DELETE** `/cpses/{cpse_id}`
+**Auth Required**: Yes (`X-Reviewer-Token`)
+
+**Request Payload:** None
+
+**Behavior & Safety Rules:**
+- Requires reviewer authentication via `X-Reviewer-Token`.
+- Removes the CPSE and its source-material operational data in an atomic transaction.
+- Dependent records removed:
+  - Dependent `MaterialNationalMapping` rows for all materials belonging to the CPSE
+  - Dependent `MatchRecommendation` rows (as source or candidate) for all materials belonging to the CPSE
+  - All source `Material` rows belonging to the CPSE
+  - The `CPSE` record
+- **National Material Preservation**: `NationalMaterial` records are shared assets and are **never** deleted.
+- **Audit Preservation**: Historical `AuditLog` entries are immutable and **never** deleted.
+- Returns `404 Not Found` if `cpse_id` does not exist.
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "deleted_id": "123e4567-e89b-12d3-a456-426614174000",
+  "deleted_type": "CPSE"
+}
+```
+
+### 0.2. List Materials for CPSE
+**GET** `/cpses/{cpse_id}/materials`
+**Auth Required**: No
+
+**Request Payload:** None
+
+**Response (200 OK):**
+```json
+[
+  {
+    "id": "222e4567-e89b-12d3-a456-426614174000",
+    "cpse_id": "123e4567-e89b-12d3-a456-426614174000",
+    "source_material_code": "VLV-001",
+    "source_description": "BALL VALVE 2IN 300LB",
+    "category": "VALVE",
+    "normalized_description": "Ball Valve, 2\", Class 300"
+  }
+]
+```
+*Note: Returns `[]` if the CPSE exists but has no materials. Returns `404 Not Found` if the `cpse_id` does not exist.*
+
+### 0.3. Get Material Detail
+**GET** `/materials/{material_id}`
+**Auth Required**: No
+
+**Request Payload:** None
+
+**Response (200 OK):**
+```json
+{
+  "id": "222e4567-e89b-12d3-a456-426614174000",
+  "cpse_id": "123e4567-e89b-12d3-a456-426614174000",
+  "source_material_code": "VLV-001",
+  "source_description": "BALL VALVE 2IN 300LB",
+  "source_uom": "EA",
+  "source_specifications": "API 6D",
+  "raw_source_data": {"Code": "VLV-001", "Desc": "BALL VALVE 2IN 300LB"},
+  "category": "VALVE",
+  "valve_type": "BALL",
+  "size": "DN50",
+  "body_material": "CARBON_STEEL",
+  "pressure_class": "CLASS300",
+  "connection_type": "RF",
+  "trim": "SS316",
+  "normalized_uom": "EACH",
+  "normalized_description": "Ball Valve, 2\", Class 300",
+  "normalized_attributes": {"extracted_trim": "SS316"},
+  "created_at": "2026-08-31T12:00:00Z",
+  "updated_at": "2026-08-31T12:00:00Z"
+}
+```
+*Note: Returns `404 Not Found` if the material ID does not exist. A malformed UUID will return standard HTTP 422.*
+
+### 0.4. Delete Material
+**DELETE** `/materials/{material_id}`
+**Auth Required**: Yes (`X-Reviewer-Token`)
+
+**Request Payload:** None
+
+**Behavior & Safety Rules:**
+- Requires reviewer authentication via `X-Reviewer-Token`.
+- Removes a single Material and its dependent operational data in an atomic transaction.
+- Dependent records removed:
+  - Dependent `MaterialNationalMapping` rows for this material
+  - Dependent `MatchRecommendation` rows where this material is source or candidate
+  - The source `Material` record
+- **National Material Preservation**: `NationalMaterial` records are shared assets and are **never** deleted.
+- **Audit Preservation**: Historical `AuditLog` entries are immutable and **never** deleted.
+- Returns `404 Not Found` if `material_id` does not exist.
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "deleted_id": "222e4567-e89b-12d3-a456-426614174000",
+  "deleted_type": "MATERIAL"
+}
+```
+
 ### 1. Upload Materials
 **POST** `/materials/import`
 **Auth Required**: No
@@ -189,6 +339,129 @@ Error responses always take the shape:
 }
 ```
 
+
+### 7. List National Materials
+**GET** `/national-materials`
+**Auth Required**: No
+
+**Request Payload:** None
+
+**Response (200 OK):**
+```json
+[
+  {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "national_code": "NM-12345678",
+    "canonical_description": "Ball Valve, 2\", Class 300",
+    "status": "ACTIVE"
+  }
+]
+```
+
+### 8. Get National Material Detail
+**GET** `/national-materials/{national_material_id}`
+**Auth Required**: No
+
+**Request Payload:** None
+
+**Response (200 OK):**
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "national_code": "NM-12345678",
+  "category": "VALVE",
+  "canonical_description": "Ball Valve, 2\", Class 300",
+  "valve_type": "BALL",
+  "size": "DN50",
+  "body_material": "CARBON_STEEL",
+  "pressure_class": "CLASS300",
+  "connection_type": "RF",
+  "trim": "SS316",
+  "normalized_uom": "EACH",
+  "identity_key": "VALVE|BALL|DN50|CARBON_STEEL|CLASS300|RF|SS316",
+  "status": "ACTIVE"
+}
+```
+
+### 9. Get Material Mapping History
+**GET** `/materials/{material_id}/mapping-history`
+**Auth Required**: No
+
+**Request Payload:** None
+
+**Response (200 OK):**
+```json
+[
+  {
+    "id": "777e4567-e89b-12d3-a456-426614174222",
+    "material_id": "123e4567-e89b-12d3-a456-426614174000",
+    "national_material_id": "555e4567-e89b-12d3-a456-426614174111",
+    "basis": "AUTO_SAME",
+    "status": "ACTIVE",
+    "recommendation_id": "444e4567-e89b-12d3-a456-426614174000",
+    "created_at": "2026-08-31T12:00:00Z",
+    "updated_at": "2026-08-31T12:00:00Z"
+  }
+]
+```
+
+### 10. List Audit Logs
+**GET** `/audit`
+**Auth Required**: No
+**Query Parameters:**
+- `entity_type` (optional string): Filter by entity type (e.g., "MATERIAL")
+- `entity_id` (optional string): Filter by entity ID
+
+**Response (200 OK):**
+```json
+[
+  {
+    "id": "888e4567-e89b-12d3-a456-426614174333",
+    "actor": "SYSTEM",
+    "action": "NORMALIZE",
+    "entity_type": "MATERIAL",
+    "entity_id": "123e4567-e89b-12d3-a456-426614174000",
+    "before_state": {},
+    "after_state": {"valve_type": "BALL"},
+    "reason": "Normalized from raw data",
+    "created_at": "2026-08-31T12:00:00Z"
+  }
+]
+```
+
+
+### 11. Dashboard Overview
+**GET** `/dashboard`
+**Auth Required**: No
+
+**Request Payload:** None
+
+**Response (200 OK):**
+```json
+{
+  "inventory": {
+    "total_materials": 1500,
+    "total_cpses": 3
+  },
+  "harmonization": {
+    "total_national_materials": 450,
+    "total_mapped_materials": 1200,
+    "automation_rate_percentage": 85.5
+  },
+  "review": {
+    "pending_reviews": 45,
+    "completed_reviews": 120
+  },
+  "cpse_breakdown": [
+    {
+      "cpse_id": "123e4567-e89b-12d3-a456-426614174000",
+      "cpse_name": "CPSE A",
+      "total_materials": 500,
+      "mapped_materials": 400
+    }
+  ]
+}
+```
 
 ---
 

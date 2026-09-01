@@ -20,7 +20,7 @@ def get_identity_key(material: Material) -> Optional[str]:
     ]
     if any(attr is None for attr in attrs):
         return None
-    
+
     return "|".join(str(a) for a in attrs)
 
 def generate_canonical_desc(material: Material) -> str:
@@ -36,10 +36,10 @@ def harmonize_material(db: Session, material: Material) -> Dict[str, Any]:
     """
     # 1. Check for existing active mapping
     existing = db.query(MaterialNationalMapping).filter_by(
-        material_id=material.id, 
+        material_id=material.id,
         status="ACTIVE"
     ).first()
-    
+
     if existing:
         return {
             "status": "skipped",
@@ -60,7 +60,7 @@ def harmonize_material(db: Session, material: Material) -> Dict[str, Any]:
         source_material_id=material.id,
         classification="SAME"
     ).all()
-    
+
     if not recs:
         return {
             "status": "skipped",
@@ -73,7 +73,7 @@ def harmonize_material(db: Session, material: Material) -> Dict[str, Any]:
         cand = db.query(Material).filter_by(id=rec.candidate_material_id).first()
         if not cand:
             continue
-            
+
         cand_key = get_identity_key(cand)
         if cand_key and cand_key == identity_key:
             eligible_cand = cand
@@ -89,7 +89,7 @@ def harmonize_material(db: Session, material: Material) -> Dict[str, Any]:
     # 4. Get or Create NationalMaterial
     nm = db.query(NationalMaterial).filter_by(identity_key=identity_key).first()
     nm_action = "REUSED"
-    
+
     if not nm:
         nm = NationalMaterial(
             id=uuid.uuid4(),
@@ -109,7 +109,7 @@ def harmonize_material(db: Session, material: Material) -> Dict[str, Any]:
         db.add(nm)
         db.flush()
         nm_action = "CREATED"
-        
+
         audit_nm = AuditLog(
             id=uuid.uuid4(),
             actor="system_harmonization",
@@ -133,7 +133,7 @@ def harmonize_material(db: Session, material: Material) -> Dict[str, Any]:
     )
     db.add(mapping)
     db.flush()
-    
+
     audit_map = AuditLog(
         id=uuid.uuid4(),
         actor="system_harmonization",
@@ -153,4 +153,3 @@ def harmonize_material(db: Session, material: Material) -> Dict[str, Any]:
         "mapping_id": str(mapping.id),
         "national_code": nm.national_code
     }
-

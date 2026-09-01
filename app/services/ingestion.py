@@ -8,9 +8,9 @@ from app.models import Material, AuditLog
 from app.schemas.material import ImportSummary, ImportRowError
 
 def process_material_import(
-    db: Session, 
-    cpse_id: uuid.UUID, 
-    file_contents: bytes, 
+    db: Session,
+    cpse_id: uuid.UUID,
+    file_contents: bytes,
     filename: str
 ) -> ImportSummary:
     """
@@ -54,6 +54,7 @@ def process_material_import(
         if count > 1:
             raise ValueError(f"Ambiguous headers: Multiple columns resolve to {canonical}")
 
+    df_raw = df.copy()
     df.rename(columns=new_columns, inplace=True)
 
     # 2. Validate columns
@@ -68,7 +69,7 @@ def process_material_import(
 
     # 3. Check for existing codes to prevent duplicate constraint violations
     existing_codes = {
-        row[0] for row in 
+        row[0] for row in
         db.query(Material.source_material_code).filter(Material.cpse_id == cpse_id).all()
     }
 
@@ -87,13 +88,13 @@ def process_material_import(
     # 4. Process Rows
     for idx, row in df.iterrows():
         row_num = idx + 2  # Assuming row 1 is header
-        
+
         mat_code = row.get("source_material_code")
         desc = row.get("source_description")
         uom = row.get("source_uom")
         specs = row.get("source_specifications")
         category = row.get("category")
-        
+
         # Clean strings, treating NaN as None
         def safe_strip(val):
             if pd.isna(val) or val is None:
@@ -126,10 +127,11 @@ def process_material_import(
         seen_in_file.add(mat_code)
 
         # Convert row to clean dict for raw_source_data
-        raw_data = {k: str(v).strip() if isinstance(v, str) else v 
-                    for k, v in row.to_dict().items() 
+        raw_row = df_raw.loc[idx]
+        raw_data = {k: str(v).strip() if isinstance(v, str) else v
+                    for k, v in raw_row.to_dict().items()
                     if not pd.isna(v) and v is not None}
-        
+
         mat = Material(
             id=uuid.uuid4(),
             cpse_id=cpse_id,
@@ -141,12 +143,12 @@ def process_material_import(
             raw_source_data=raw_data
         )
         new_materials.append(mat)
-        
+
     # 5. Database transaction
     if new_materials:
         try:
             db.add_all(new_materials)
-            
+
             for mat in new_materials:
                 audit_logs.append(AuditLog(
                     id=uuid.uuid4(),
@@ -158,7 +160,7 @@ def process_material_import(
                     after_state=mat.raw_source_data,
                     reason="Initial ingestion"
                 ))
-            
+
             db.add_all(audit_logs)
             db.commit()
             summary.imported_rows = len(new_materials)
@@ -168,5 +170,5 @@ def process_material_import(
         except Exception as e:
             db.rollback()
             raise ValueError(f"Unexpected error saving to database: {str(e)}")
-            
+
     return summary

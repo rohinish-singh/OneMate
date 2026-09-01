@@ -4,10 +4,10 @@
 
 **Problem Statement:** SIH26099
 
-**Organization:** Ministry of Petroleum & Natural Gas  
+**Organization:** Ministry of Petroleum & Natural Gas
 **Department:** Chennai Petroleum Corporation Limited (CPCL)
 
-**Architecture Status:** LOCKED  
+**Architecture Status:** LOCKED
 **Document Status:** Approved for MVP implementation
 
 ---

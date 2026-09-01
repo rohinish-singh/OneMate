@@ -174,4 +174,3 @@ If an AI/ML feature is not required to demonstrate a better MVP matching result,
 No scope expansion without explicit approval.
 
 The AI/ML team must remain within the deterministic backend baseline unless there is clear, measured evidence that a simple ML improvement yields a better MVP result.
-

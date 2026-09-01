@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # --- API ---
     api_v1_prefix: str = "/api/v1"
-    
+
     # --- Security ---
     reviewer_token: str
 
@@ -39,4 +39,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

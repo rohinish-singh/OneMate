@@ -41,22 +41,22 @@ class Material(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     cpse_id = Column(UUID(as_uuid=True), ForeignKey("cpse.id", ondelete="RESTRICT"), nullable=False)
-    
+
     source_material_code = Column(String(100), nullable=False)
     source_description = Column(Text, nullable=False)
     source_uom = Column(String(50), nullable=False)
     source_specifications = Column(Text, nullable=True)
     raw_source_data = Column(JSONB, nullable=True)
-    
+
     category = Column(String(50), nullable=True)
-    
+
     valve_type = Column(String(100), nullable=True)
     size = Column(String(100), nullable=True)
     body_material = Column(String(100), nullable=True)
     pressure_class = Column(String(100), nullable=True)
     connection_type = Column(String(100), nullable=True)
     trim = Column(String(100), nullable=True)
-    
+
     normalized_uom = Column(String(50), nullable=True)
     normalized_description = Column(Text, nullable=True)
     normalized_attributes = Column(JSONB, nullable=True)
@@ -135,7 +135,7 @@ class MaterialNationalMapping(Base):
     basis = Column(String(50), nullable=False)
     status = Column(String(50), nullable=False)
     recommendation_id = Column(UUID(as_uuid=True), ForeignKey("match_recommendation.id", ondelete="RESTRICT"), nullable=True)
-    
+
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -168,4 +168,3 @@ class AuditLog(Base):
         Index("ix_audit_entity", "entity_type", "entity_id"),
         Index("ix_audit_created_at", "created_at"),
     )
-
