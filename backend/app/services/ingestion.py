@@ -118,6 +118,8 @@ def process_material_import(
             summary.errors.append(ImportRowError(row=row_num, error="Category must be 'VALVE' if provided"))
             continue
 
+
+
         if mat_code in existing_codes or mat_code in seen_in_file:
             summary.duplicate_rows += 1
             summary.rejected_rows += 1

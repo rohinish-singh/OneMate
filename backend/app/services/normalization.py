@@ -174,9 +174,58 @@ def extract_connection_type(text: str) -> Optional[str]:
         return "FLANGED"
     return None
 
+SUPPORTED_CATEGORIES = {"VALVE", "PUMP", "GASKET", "FLANGE", "BEARING", "FASTENER"}
+
+def detect_category(text: str, explicit_category: Optional[str] = None) -> Optional[str]:
+    """
+    Deterministically detects the industrial material family/category.
+    Precedence:
+    1. Explicit source category, if provided and valid.
+    2. Specific multi-word keywords.
+    3. Broader family keywords.
+    4. None (UNKNOWN) if no safe category can be established.
+    """
+    if explicit_category and explicit_category.upper() in SUPPORTED_CATEGORIES:
+        return explicit_category.upper()
+
+    if not text:
+        return None
+
+    # 1. Gasket
+    if re.search(r'\b(SPIRAL WOUND GASKET|SPW GASKET|RING JOINT GASKET|RTJ GASKET|SHEET GASKET|GASKET)\b', text):
+        return "GASKET"
+
+    # 2. Bearing (prioritized before valve ball check)
+    if re.search(r'\b(BALL BEARING|ROLLER BEARING|NEEDLE BEARING|TAPERED BEARING|BEARING)\b', text):
+        return "BEARING"
+
+    # 3. Flange
+    if re.search(r'\b(WELD NECK FLANGE|WN FLANGE|BLIND FLANGE|SLIP ON FLANGE|SO FLANGE|SOCKET WELD FLANGE|THREADED FLANGE|FLANGE)\b', text):
+        return "FLANGE"
+
+    # 4. Pump
+    if re.search(r'\b(CENTRIFUGAL PUMP|VACUUM PUMP|SUBMERSIBLE PUMP|POSITIVE DISPLACEMENT PUMP|PUMP)\b', text):
+        return "PUMP"
+
+    # 5. Fastener
+    if re.search(r'\b(HEX BOLT|STUD BOLT|ANCHOR BOLT|EYE BOLT|U BOLT|HEX NUT|LOCK NUT|WASHER|FASTENER|BOLT|SCREW)\b', text):
+        return "FASTENER"
+
+    # 6. Valve
+    if re.search(r'\b(BALL VALVE|BALL VLV|GATE VALVE|GATE VLV|GLOBE VALVE|GLOBE VLV|CHECK VALVE|CHECK VLV|BUTTERFLY VALVE|BUTTERFLY VLV|NEEDLE VALVE|NEEDLE VLV|PLUG VALVE|PLUG VLV|DIAPHRAGM VALVE|DIAPHRAGM VLV|VALVE|VLV)\b', text):
+        return "VALVE"
+
+    # Fallback to single standalone valve type words
+    valve_types = ["BALL", "GATE", "GLOBE", "BUTTERFLY", "CHECK", "NEEDLE", "PLUG", "DIAPHRAGM"]
+    for vt in valve_types:
+        if re.search(rf'\b{vt}\b', text):
+            return "VALVE"
+
+    return None
+
 def normalize_material_record(db: Session, material: Material, actor: str = "system_normalization") -> Optional[AuditLog]:
     """
-    Applies deterministic normalization and valve extraction to a material.
+    Applies category-aware deterministic normalization to a material.
     Updates the derived fields idempotently.
     Returns an AuditLog if changes were made.
     """
@@ -187,26 +236,56 @@ def normalize_material_record(db: Session, material: Material, actor: str = "sys
 
     search_text = normalize_text(search_text)
 
-    # Extract trim first, leaving text without trim to avoid material confusion
-    ext_trim, remaining_text = extract_trim(search_text)
-    ext_valve_type = extract_valve_type(search_text)
+    # 1. Detect Category
+    category = detect_category(search_text, material.category)
 
-    resolved_category = material.category
-    if not resolved_category and (ext_valve_type or re.search(r'\b(VALVE|VLV)\b', search_text)):
-        resolved_category = "VALVE"
+    norm_desc = normalize_text(material.source_description)
+    norm_uom = normalize_uom(material.source_uom)
+
+    valve_type = None
+    size = None
+    pressure_class = None
+    body_material = None
+    connection_type = None
+    trim = None
+
+    if category == "VALVE":
+        ext_trim, remaining_text = extract_trim(search_text)
+        valve_type = extract_valve_type(search_text)
+        size = extract_size(search_text)
+        pressure_class = extract_pressure_class(search_text)
+        body_material = extract_body_material(remaining_text)
+        connection_type = extract_connection_type(search_text)
+        trim = ext_trim
+    elif category == "FLANGE":
+        size = extract_size(search_text)
+        pressure_class = extract_pressure_class(search_text)
+        body_material = extract_body_material(search_text)
+        # For flanges, check if RF or explicit connection facing is stated
+        if re.search(r'\b(RF|RAISED FACE|SW|SOCKET WELD|BW|BUTT WELD|THREADED|SCREWED)\b', search_text):
+            connection_type = extract_connection_type(search_text)
+    elif category == "GASKET":
+        size = extract_size(search_text)
+        pressure_class = extract_pressure_class(search_text)
+        body_material = extract_body_material(search_text)
+    elif category == "PUMP":
+        body_material = extract_body_material(search_text)
+    elif category == "FASTENER":
+        body_material = extract_body_material(search_text)
+    elif category == "BEARING":
+        pass
 
     new_vals = {
-        "category": resolved_category,
-        "normalized_description": normalize_text(material.source_description),
-        "normalized_uom": normalize_uom(material.source_uom),
-        "valve_type": ext_valve_type,
-        "size": extract_size(search_text),
-        "pressure_class": extract_pressure_class(search_text),
-        "body_material": extract_body_material(remaining_text),
-        "connection_type": extract_connection_type(search_text),
-        "trim": ext_trim,
+        "category": category,
+        "normalized_description": norm_desc,
+        "normalized_uom": norm_uom,
+        "valve_type": valve_type,
+        "size": size,
+        "pressure_class": pressure_class,
+        "body_material": body_material,
+        "connection_type": connection_type,
+        "trim": trim,
     }
-
 
     # Check if anything actually changed (idempotency)
     changed = False
@@ -230,10 +309,11 @@ def normalize_material_record(db: Session, material: Material, actor: str = "sys
             entity_id=str(material.id),
             before_state=before_state,
             after_state=after_state,
-            reason="Deterministic valve normalization"
+            reason="Deterministic category-aware normalization"
         )
         db.add(audit_log)
         db.flush()
         return audit_log
 
     return None
+

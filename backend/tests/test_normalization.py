@@ -272,3 +272,164 @@ def test_regression_patch_5d_case2(db, test_cpse):
     assert mat.normalized_uom == "EACH"
     assert mat.normalized_description == "BALL VLV DN50 CARBON STEEL CLASS 300 RF SS304"
 
+def test_regression_patch_5e_category_pump(db, test_cpse):
+    # 3. CENTRIFUGAL PUMP 50GPM 100PSI CS
+    mat = Material(
+        id=uuid.uuid4(),
+        cpse_id=test_cpse.id,
+        source_material_code="PUMP-1",
+        source_description="CENTRIFUGAL PUMP 50GPM 100PSI CS",
+        source_uom="EA",
+        category=None,
+        raw_source_data={"original": "CENTRIFUGAL PUMP 50GPM 100PSI CS"}
+    )
+    db.add(mat)
+    db.commit()
+
+    normalize_material_record(db, mat)
+    db.commit()
+    db.refresh(mat)
+
+    assert mat.category == "PUMP"
+    assert mat.valve_type is None
+    assert mat.size is None
+    assert mat.pressure_class is None
+    assert mat.body_material == "CARBON_STEEL"
+    assert mat.connection_type is None
+    assert mat.trim is None
+    assert mat.normalized_uom == "EACH"
+    assert mat.normalized_description == "CENTRIFUGAL PUMP 50GPM 100PSI CS"
+
+def test_regression_patch_5e_category_gasket(db, test_cpse):
+    # 4. SPIRAL WOUND GASKET DN50 CLASS 300 CS/PTFE
+    mat = Material(
+        id=uuid.uuid4(),
+        cpse_id=test_cpse.id,
+        source_material_code="GASKET-1",
+        source_description="SPIRAL WOUND GASKET DN50 CLASS 300 CS/PTFE",
+        source_uom="EA",
+        category=None,
+        raw_source_data={"original": "SPIRAL WOUND GASKET DN50 CLASS 300 CS/PTFE"}
+    )
+    db.add(mat)
+    db.commit()
+
+    normalize_material_record(db, mat)
+    db.commit()
+    db.refresh(mat)
+
+    assert mat.category == "GASKET"
+    assert mat.valve_type is None
+    assert mat.size == "DN50"
+    assert mat.pressure_class == "CLASS300"
+    assert mat.body_material == "CARBON_STEEL"
+    assert mat.connection_type is None
+    assert mat.trim is None
+    assert mat.normalized_uom == "EACH"
+    assert mat.normalized_description == "SPIRAL WOUND GASKET DN50 CLASS 300 CS/PTFE"
+
+def test_regression_patch_5e_category_flange(db, test_cpse):
+    # 5. WELD NECK FLANGE DN100 CS CLASS150
+    mat = Material(
+        id=uuid.uuid4(),
+        cpse_id=test_cpse.id,
+        source_material_code="FLANGE-1",
+        source_description="WELD NECK FLANGE DN100 CS CLASS150",
+        source_uom="EA",
+        category=None,
+        raw_source_data={"original": "WELD NECK FLANGE DN100 CS CLASS150"}
+    )
+    db.add(mat)
+    db.commit()
+
+    normalize_material_record(db, mat)
+    db.commit()
+    db.refresh(mat)
+
+    assert mat.category == "FLANGE"
+    assert mat.valve_type is None
+    assert mat.size == "DN100"
+    assert mat.pressure_class == "CLASS150"
+    assert mat.body_material == "CARBON_STEEL"
+    assert mat.trim is None
+    assert mat.normalized_uom == "EACH"
+    assert mat.normalized_description == "WELD NECK FLANGE DN100 CS CLASS150"
+
+def test_regression_patch_5e_category_bearing(db, test_cpse):
+    # 6. ROLLER BEARING 6204-2RS
+    mat = Material(
+        id=uuid.uuid4(),
+        cpse_id=test_cpse.id,
+        source_material_code="BEARING-1",
+        source_description="ROLLER BEARING 6204-2RS",
+        source_uom="EA",
+        category=None,
+        raw_source_data={"original": "ROLLER BEARING 6204-2RS"}
+    )
+    db.add(mat)
+    db.commit()
+
+    normalize_material_record(db, mat)
+    db.commit()
+    db.refresh(mat)
+
+    assert mat.category == "BEARING"
+    assert mat.valve_type is None
+    assert mat.size is None
+    assert mat.pressure_class is None
+    assert mat.body_material is None
+    assert mat.connection_type is None
+    assert mat.trim is None
+    assert mat.normalized_uom == "EACH"
+    assert mat.normalized_description == "ROLLER BEARING 6204-2RS"
+
+def test_regression_patch_5e_ball_bearing_not_valve(db, test_cpse):
+    # BALL BEARING should be BEARING and have valve_type is None
+    mat = Material(
+        id=uuid.uuid4(),
+        cpse_id=test_cpse.id,
+        source_material_code="BEARING-2",
+        source_description="BALL BEARING 6205",
+        source_uom="EA",
+        category=None,
+        raw_source_data={"original": "BALL BEARING 6205"}
+    )
+    db.add(mat)
+    db.commit()
+
+    normalize_material_record(db, mat)
+    db.commit()
+    db.refresh(mat)
+
+    assert mat.category == "BEARING"
+    assert mat.valve_type is None
+
+def test_regression_patch_5e_category_fastener(db, test_cpse):
+    # 7. HEX BOLT M16 X 50MM SS304
+    mat = Material(
+        id=uuid.uuid4(),
+        cpse_id=test_cpse.id,
+        source_material_code="BOLT-1",
+        source_description="HEX BOLT M16 X 50MM SS304",
+        source_uom="EA",
+        category=None,
+        raw_source_data={"original": "HEX BOLT M16 X 50MM SS304"}
+    )
+    db.add(mat)
+    db.commit()
+
+    normalize_material_record(db, mat)
+    db.commit()
+    db.refresh(mat)
+
+    assert mat.category == "FASTENER"
+    assert mat.valve_type is None
+    assert mat.size is None
+    assert mat.pressure_class is None
+    assert mat.body_material == "SS304"
+    assert mat.connection_type is None
+    assert mat.trim is None
+    assert mat.normalized_uom == "EACH"
+    assert mat.normalized_description == "HEX BOLT M16 X 50MM SS304"
+
+

@@ -69,7 +69,7 @@ class Material(Base):
 
     __table_args__ = (
         UniqueConstraint("cpse_id", "source_material_code", name="uq_material_cpse_source_code"),
-        CheckConstraint("category IS NULL OR category = 'VALVE'", name="chk_material_category_valve"),
+        CheckConstraint("category IS NULL OR category IN ('VALVE', 'PUMP', 'GASKET', 'FLANGE', 'BEARING', 'FASTENER')", name="chk_material_category_valid"),
         Index("ix_material_cpse_id", "cpse_id"),
         Index("ix_material_category", "category"),
     )
