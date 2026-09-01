@@ -9,6 +9,20 @@ class NationalMaterialListResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class MappedSourceMaterialSummary(BaseModel):
+    mapping_id: UUID
+    material_id: UUID
+    cpse_id: UUID
+    cpse_code: str
+    cpse_name: str
+    source_material_code: str
+    source_description: str
+    mapping_status: str
+    mapping_basis: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class NationalMaterialDetailResponse(BaseModel):
     id: UUID
     national_code: str
@@ -23,5 +37,7 @@ class NationalMaterialDetailResponse(BaseModel):
     normalized_uom: str
     identity_key: str
     status: str | None = None
+    mapped_materials: list[MappedSourceMaterialSummary] = []
 
     model_config = ConfigDict(from_attributes=True)
+

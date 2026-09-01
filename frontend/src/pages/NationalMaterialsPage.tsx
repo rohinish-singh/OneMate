@@ -12,6 +12,7 @@ import { ErrorState } from '../components/common/ErrorState';
 import { EmptyState } from '../components/common/EmptyState';
 import { Badge } from '../components/common/Badge';
 import { NationalMaterialInspector } from '../components/national-materials/NationalMaterialInspector';
+import { MaterialInspector } from '../components/materials/MaterialInspector';
 
 export const NationalMaterialsPage: React.FC = () => {
   const [items, setItems] = useState<NationalMaterialListItem[]>([]);
@@ -19,6 +20,10 @@ export const NationalMaterialsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState<string>('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [inspectedMaterialId, setInspectedMaterialId] = useState<string | null>(null);
+  const [inspectedCpseName, setInspectedCpseName] = useState<string | undefined>(undefined);
+  const [inspectedCpseCode, setInspectedCpseCode] = useState<string | undefined>(undefined);
+
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -211,11 +216,30 @@ export const NationalMaterialsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Inspector Panel */}
+          {/* National Material Inspector Panel */}
           {selectedId && (
             <NationalMaterialInspector
               nationalMaterialId={selectedId}
               onClose={() => setSelectedId(null)}
+              onSelectMaterial={(matId, _cpseId, cpseName, cpseCode) => {
+                setInspectedMaterialId(matId);
+                setInspectedCpseName(cpseName);
+                setInspectedCpseCode(cpseCode);
+              }}
+            />
+          )}
+
+          {/* Source Material Inspector Drilldown */}
+          {inspectedMaterialId && (
+            <MaterialInspector
+              materialId={inspectedMaterialId}
+              selectedCpseName={inspectedCpseName}
+              selectedCpseCode={inspectedCpseCode}
+              onClose={() => {
+                setInspectedMaterialId(null);
+                setInspectedCpseName(undefined);
+                setInspectedCpseCode(undefined);
+              }}
             />
           )}
         </div>
@@ -223,4 +247,5 @@ export const NationalMaterialsPage: React.FC = () => {
     </div>
   );
 };
+
 

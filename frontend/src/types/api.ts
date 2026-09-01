@@ -154,6 +154,18 @@ export interface NationalMaterialListItem {
   status: string | null;
 }
 
+export interface MappedSourceMaterialSummary {
+  mapping_id: string;
+  material_id: string;
+  cpse_id: string;
+  cpse_code: string;
+  cpse_name: string;
+  source_material_code: string;
+  source_description: string;
+  mapping_status: string;
+  mapping_basis: string;
+}
+
 export interface NationalMaterialDetailResponse {
   id: string;
   national_code: string;
@@ -168,7 +180,9 @@ export interface NationalMaterialDetailResponse {
   normalized_uom: string;
   identity_key: string;
   status: string | null;
+  mapped_materials?: MappedSourceMaterialSummary[];
 }
+
 
 // ==========================================
 // Mapping History
