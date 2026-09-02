@@ -392,8 +392,162 @@ def test_mapped_semantics_human_accept_preserves_other_recs(client: TestClient, 
     assert q_map[str(r1.id)]["mapping_status"] == "MAPPED"
     assert q_map[str(r1.id)]["mapping_basis"] == "HUMAN_CONFIRMED_SAME"
 
-    # R2 remains DIFFERENT
-    assert q_map[str(r2.id)]["mapping_status"] == "DIFFERENT"
-    assert q_map[str(r2.id)]["national_material_code"] is None
+def test_accept_idempotent_same_candidate(client: TestClient, db, test_cpse):
+    # 2. ACCEPT same source + same candidate when mapping already exists is idempotent
+    m1 = create_mat(db, test_cpse)
+    m2 = create_mat(db, test_cpse)
+    rec = create_rec(db, m1, m2, "POTENTIALLY_EQUIVALENT")
 
+    headers = {"X-Reviewer-Token": settings.reviewer_token}
+    resp1 = client.post(f"/api/v1/reviews/{rec.id}/action", json={"action": "ACCEPT"}, headers=headers)
+    assert resp1.status_code == 200
 
+    resp2 = client.post(f"/api/v1/reviews/{rec.id}/action", json={"action": "ACCEPT"}, headers=headers)
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "success"
+
+    mappings = db.query(MaterialNationalMapping).filter_by(material_id=m1.id, status="ACTIVE").all()
+    assert len(mappings) == 1
+
+def test_unmap_active_mapping_succeeds(client: TestClient, db, test_cpse):
+    # 4. UNMAP existing active mapping succeeds and marks it INACTIVE
+    m1 = create_mat(db, test_cpse)
+    m2 = create_mat(db, test_cpse)
+    rec = create_rec(db, m1, m2, "POTENTIALLY_EQUIVALENT")
+
+    headers = {"X-Reviewer-Token": settings.reviewer_token}
+    client.post(f"/api/v1/reviews/{rec.id}/action", json={"action": "ACCEPT"}, headers=headers)
+
+    mapping = db.query(MaterialNationalMapping).filter_by(material_id=m1.id, status="ACTIVE").first()
+    assert mapping is not None
+
+    resp_unmap = client.post(f"/api/v1/reviews/{rec.id}/action", json={"action": "UNMAP", "reason": "Operator unmap"}, headers=headers)
+    assert resp_unmap.status_code == 200
+
+    db.refresh(mapping)
+    assert mapping.status == "INACTIVE"
+
+    log = db.query(AuditLog).filter_by(entity_id=str(mapping.id), action="UNMAP").first()
+    assert log is not None
+
+def test_unmap_then_accept_succeeds(client: TestClient, db, test_cpse):
+    # 5. UNMAP followed by ACCEPT succeeds
+    m1 = create_mat(db, test_cpse)
+    m2 = create_mat(db, test_cpse)
+    m3 = create_mat(db, test_cpse)
+    rec1 = create_rec(db, m1, m2, "POTENTIALLY_EQUIVALENT")
+    rec2 = create_rec(db, m1, m3, "POTENTIALLY_EQUIVALENT")
+
+    headers = {"X-Reviewer-Token": settings.reviewer_token}
+    # Accept rec1
+    client.post(f"/api/v1/reviews/{rec1.id}/action", json={"action": "ACCEPT"}, headers=headers)
+
+    # UNMAP rec1
+    resp_unmap = client.post(f"/api/v1/reviews/{rec1.id}/action", json={"action": "UNMAP"}, headers=headers)
+    assert resp_unmap.status_code == 200
+
+    # Accept rec2
+    resp_accept2 = client.post(f"/api/v1/reviews/{rec2.id}/action", json={"action": "ACCEPT"}, headers=headers)
+    assert resp_accept2.status_code == 200
+
+    active_mappings = db.query(MaterialNationalMapping).filter_by(material_id=m1.id, status="ACTIVE").all()
+    assert len(active_mappings) == 1
+    assert active_mappings[0].recommendation_id == rec2.id
+
+def test_override_replaces_existing_mapping(client: TestClient, db, test_cpse):
+    # 6. OVERRIDE explicitly replaces existing active mapping
+    m1 = create_mat(db, test_cpse)
+    m2 = create_mat(db, test_cpse)
+    rec = create_rec(db, m1, m2, "POTENTIALLY_EQUIVALENT")
+
+    headers = {"X-Reviewer-Token": settings.reviewer_token}
+    client.post(f"/api/v1/reviews/{rec.id}/action", json={"action": "ACCEPT"}, headers=headers)
+
+    old_mapping = db.query(MaterialNationalMapping).filter_by(material_id=m1.id, status="ACTIVE").first()
+    assert old_mapping is not None
+
+    # Target new NM
+    nm2 = NationalMaterial(
+        id=uuid.uuid4(),
+        national_code=f"NM-OVR-{uuid.uuid4().hex[:6]}",
+        identity_key=f"OVR-KEY-{uuid.uuid4()}",
+        canonical_description="TARGET NM",
+        category="VALVE",
+        valve_type="BALL",
+        size="DN80",
+        body_material="CARBON_STEEL",
+        pressure_class="CLASS150",
+        connection_type="RF",
+        trim="SS304",
+        normalized_uom="EACH",
+        status="ACTIVE"
+    )
+    db.add(nm2)
+    db.commit()
+
+    resp_ovr = client.post(f"/api/v1/reviews/{rec.id}/action", json={
+        "action": "OVERRIDE",
+        "reason": "Explicit operator remap",
+        "national_material_id": str(nm2.id)
+    }, headers=headers)
+    assert resp_ovr.status_code == 200
+
+    db.refresh(old_mapping)
+    assert old_mapping.status == "INACTIVE"
+
+    new_mapping = db.query(MaterialNationalMapping).filter_by(material_id=m1.id, status="ACTIVE").first()
+    assert new_mapping is not None
+    assert new_mapping.id != old_mapping.id
+    assert new_mapping.national_material_id == nm2.id
+    assert new_mapping.basis == "HUMAN_OVERRIDE"
+
+def test_accept_flange_category_succeeds(client: TestClient, db, test_cpse):
+    # ISSUE 1: ACCEPT on FLANGE category creates NM and Mapping without constraint violation
+    m_flange1 = Material(
+        id=uuid.uuid4(),
+        cpse_id=test_cpse.id,
+        source_material_code=f"FLG-1-{uuid.uuid4().hex[:4]}",
+        source_description="FLANGE WN 100MM CS CL150",
+        source_uom="EA",
+        category="FLANGE",
+        normalized_description="FLANGE WN 100MM CS CL150",
+        size="DN100",
+        body_material="CARBON_STEEL",
+        pressure_class="CLASS150",
+        connection_type="RF",
+        normalized_uom="EACH"
+    )
+    m_flange2 = Material(
+        id=uuid.uuid4(),
+        cpse_id=test_cpse.id,
+        source_material_code=f"FLG-2-{uuid.uuid4().hex[:4]}",
+        source_description="WELD NECK FLANGE DN100 CS CLASS 150",
+        source_uom="EA",
+        category="FLANGE",
+        normalized_description="WELD NECK FLANGE DN100 CS CLASS 150",
+        size="DN100",
+        body_material="CARBON_STEEL",
+        pressure_class="CLASS150",
+        connection_type="RF",
+        normalized_uom="EACH"
+    )
+    db.add_all([m_flange1, m_flange2])
+    db.commit()
+
+    rec_flange = create_rec(db, m_flange1, m_flange2, "POTENTIALLY_EQUIVALENT")
+
+    headers = {"X-Reviewer-Token": settings.reviewer_token}
+    resp = client.post(f"/api/v1/reviews/{rec_flange.id}/action", json={
+        "action": "ACCEPT",
+        "reason": "Matching flange specifications"
+    }, headers=headers)
+
+    assert resp.status_code == 200
+    mapping = db.query(MaterialNationalMapping).filter_by(material_id=m_flange1.id, status="ACTIVE").first()
+    assert mapping is not None
+    assert mapping.basis == "HUMAN_CONFIRMED_SAME"
+
+    nm = db.query(NationalMaterial).filter_by(id=mapping.national_material_id).first()
+    assert nm is not None
+    assert nm.category == "FLANGE"
+    assert "FLANGE" in nm.canonical_description

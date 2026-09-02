@@ -40,6 +40,7 @@ export const ReviewPage: React.FC = () => {
   const cpseScopeId = new URLSearchParams(location.search).get('cpseId');
   const { selectedCpse } = useCpse();
   const [scopedCpse, setScopedCpse] = useState<CPSE | null>(null);
+  const [cpsesMap, setCpsesMap] = useState<Record<string, CPSE>>({});
 
   // Reviewer Authentication State
   const [reviewerToken, setReviewerToken] = useState<string>('');
@@ -73,23 +74,25 @@ export const ReviewPage: React.FC = () => {
 
   // Identify scoped CPSE name and code
   useEffect(() => {
-    if (!cpseScopeId) {
-      setScopedCpse(null);
-      return;
-    }
-
-    if (selectedCpse && selectedCpse.id === cpseScopeId) {
-      setScopedCpse(selectedCpse);
-      return;
-    }
-
     let isCancelled = false;
     api.cpses
       .list()
       .then((cpses) => {
         if (!isCancelled) {
-          const found = cpses.find((c) => c.id === cpseScopeId);
-          setScopedCpse(found || null);
+          const map: Record<string, CPSE> = {};
+          cpses.forEach((c) => {
+            map[c.id] = c;
+          });
+          setCpsesMap(map);
+
+          if (cpseScopeId) {
+            const found = cpses.find((c) => c.id === cpseScopeId);
+            setScopedCpse(found || null);
+          } else if (selectedCpse) {
+            setScopedCpse(selectedCpse);
+          } else {
+            setScopedCpse(null);
+          }
         }
       })
       .catch(() => {
@@ -664,45 +667,76 @@ export const ReviewPage: React.FC = () => {
                 </div>
 
                 {/* 2. SIDE-BY-SIDE ENTITY SUMMARY HEADERS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Left: Source Entity */}
-                  <div className="p-4 rounded-panel border border-border bg-surface shadow-xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-charcoal-caption uppercase tracking-wider">
-                        Source Material
-                      </span>
-                      <span className="font-mono text-xs font-semibold text-charcoal bg-surface-secondary px-1.5 py-0.5 rounded-badge border border-border">
-                        {sourceDetail?.source_material_code || selectedItem.source_material_id.slice(0, 8)}
-                      </span>
-                    </div>
-                    <p className="text-body-sm font-medium text-charcoal leading-snug">
-                      {sourceDetail?.source_description || 'Loading source description...'}
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-charcoal-caption pt-1 border-t border-border/60">
-                      <Building2 className="w-3.5 h-3.5" />
-                      <span>ID: {selectedItem.source_material_id}</span>
-                    </div>
-                  </div>
+                {(() => {
+                  const sourceCpse = sourceDetail ? cpsesMap[sourceDetail.cpse_id] : null;
+                  const candidateCpse = candidateDetail ? cpsesMap[candidateDetail.cpse_id] : null;
 
-                  {/* Right: Candidate Entity */}
-                  <div className="p-4 rounded-panel border border-border bg-surface shadow-xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-charcoal-caption uppercase tracking-wider">
-                        Candidate Material
-                      </span>
-                      <span className="font-mono text-xs font-semibold text-charcoal bg-surface-secondary px-1.5 py-0.5 rounded-badge border border-border">
-                        {candidateDetail?.source_material_code || selectedItem.candidate_material_id.slice(0, 8)}
-                      </span>
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Left: Source Entity */}
+                      <div className="p-4 rounded-panel border border-border bg-surface shadow-xs space-y-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-[11px] font-semibold text-charcoal-caption uppercase tracking-wider">
+                            Source Material
+                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {sourceCpse ? (
+                              <span className="font-mono text-xs font-bold text-charcoal bg-surface-secondary px-2 py-0.5 rounded-badge border border-border flex items-center gap-1" title={sourceCpse.name}>
+                                <Building2 className="w-3 h-3 text-charcoal-muted" />
+                                {sourceCpse.code}
+                              </span>
+                            ) : sourceDetail?.cpse_id ? (
+                              <span className="font-mono text-xs font-semibold text-charcoal-muted bg-surface-secondary px-1.5 py-0.5 rounded-badge border border-border">
+                                CPSE: {sourceDetail.cpse_id.slice(0, 8)}
+                              </span>
+                            ) : null}
+                            <span className="font-mono text-xs font-semibold text-charcoal bg-surface-secondary px-1.5 py-0.5 rounded-badge border border-border">
+                              {sourceDetail?.source_material_code || selectedItem.source_material_id.slice(0, 8)}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-body-sm font-medium text-charcoal leading-snug">
+                          {sourceDetail?.source_description || 'Loading source description...'}
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-charcoal-caption pt-1 border-t border-border/60">
+                          <Building2 className="w-3.5 h-3.5" />
+                          <span>ID: {selectedItem.source_material_id}</span>
+                        </div>
+                      </div>
+
+                      {/* Right: Candidate Entity */}
+                      <div className="p-4 rounded-panel border border-border bg-surface shadow-xs space-y-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-[11px] font-semibold text-charcoal-caption uppercase tracking-wider">
+                            Candidate Material
+                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {candidateCpse ? (
+                              <span className="font-mono text-xs font-bold text-charcoal bg-surface-secondary px-2 py-0.5 rounded-badge border border-border flex items-center gap-1" title={candidateCpse.name}>
+                                <Building2 className="w-3 h-3 text-charcoal-muted" />
+                                {candidateCpse.code}
+                              </span>
+                            ) : candidateDetail?.cpse_id ? (
+                              <span className="font-mono text-xs font-semibold text-charcoal-muted bg-surface-secondary px-1.5 py-0.5 rounded-badge border border-border">
+                                CPSE: {candidateDetail.cpse_id.slice(0, 8)}
+                              </span>
+                            ) : null}
+                            <span className="font-mono text-xs font-semibold text-charcoal bg-surface-secondary px-1.5 py-0.5 rounded-badge border border-border">
+                              {candidateDetail?.source_material_code || selectedItem.candidate_material_id.slice(0, 8)}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-body-sm font-medium text-charcoal leading-snug">
+                          {candidateDetail?.source_description || 'Loading candidate description...'}
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-charcoal-caption pt-1 border-t border-border/60">
+                          <Building2 className="w-3.5 h-3.5" />
+                          <span>ID: {selectedItem.candidate_material_id}</span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-body-sm font-medium text-charcoal leading-snug">
-                      {candidateDetail?.source_description || 'Loading candidate description...'}
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-charcoal-caption pt-1 border-t border-border/60">
-                      <Building2 className="w-3.5 h-3.5" />
-                      <span>ID: {selectedItem.candidate_material_id}</span>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* 3. TECHNICAL ATTRIBUTE COMPARISON TABLE */}
                 <div className="space-y-2">

@@ -130,7 +130,11 @@ def generate_candidates(db: Session, source: Material) -> List[Material]:
     """
     Generates plausible candidates for matching.
     Avoids cross-comparing the exact same CPSE and entirely incompatible base types.
+    Enforces candidate.id != source.id and candidate.cpse_id != source.cpse_id.
     """
+    if not source or source.cpse_id is None:
+        return []
+
     query = db.query(Material).filter(
         Material.id != source.id,
         Material.cpse_id != source.cpse_id,
@@ -143,7 +147,13 @@ def generate_candidates(db: Session, source: Material) -> List[Material]:
             (Material.valve_type == source.valve_type) | (Material.valve_type.is_(None))
         )
 
-    return query.all()
+    candidates = query.all()
+
+    # Enforce backend candidate-selection invariants before returning
+    return [
+        cand for cand in candidates
+        if cand.id != source.id and cand.cpse_id != source.cpse_id
+    ]
 
 def create_match_recommendations(db: Session, source_material: Material) -> List[MatchRecommendation]:
     """
@@ -154,6 +164,9 @@ def create_match_recommendations(db: Session, source_material: Material) -> List
     recommendations = []
 
     for cand in candidates:
+        if cand.id == source_material.id or cand.cpse_id == source_material.cpse_id:
+            continue
+
         result = classify_match(source_material, cand)
 
         rec = MatchRecommendation(

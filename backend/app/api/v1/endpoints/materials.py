@@ -7,7 +7,8 @@ from app.schemas.material import ImportSummary, MaterialDetailResponse
 from app.services.ingestion import process_material_import
 from app.services.normalization import normalize_material_record
 from app.models import Material, MaterialNationalMapping, MatchRecommendation, NationalMaterial
-
+from app.services.matching import create_match_recommendations
+from app.services.harmonization import harmonize_material
 router = APIRouter()
 
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 MB
@@ -82,7 +83,7 @@ def normalize_material(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Normalization failed: {str(e)}")
 
-from app.services.matching import create_match_recommendations
+
 
 @router.post("/{material_id}/match")
 def match_material(
@@ -119,7 +120,7 @@ def match_material(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Matching failed: {str(e)}")
 
-from app.services.harmonization import harmonize_material
+
 
 @router.post("/{material_id}/harmonize")
 def harmonize_material_endpoint(
@@ -264,3 +265,36 @@ def delete_material(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete material: {str(e)}"
         )
+
+@router.post("/{material_id}/unmap")
+def unmap_material(
+    material_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    reviewer: str = Depends(get_current_reviewer)
+):
+    """
+    Deactivates any active mapping for this material and records an audit log.
+    """
+    material = db.query(Material).filter(Material.id == material_id).first()
+    if not material:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
+
+    mapping = db.query(MaterialNationalMapping).filter_by(
+        material_id=material_id, status="ACTIVE"
+    ).first()
+    if not mapping:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Material does not have an active mapping.")
+
+    mapping.status = "INACTIVE"
+    db.add(AuditLog(
+        id=uuid.uuid4(),
+        actor=reviewer,
+        action="UNMAP",
+        entity_type="MATERIAL_NATIONAL_MAPPING",
+        entity_id=str(mapping.id),
+        before_state={"status": "ACTIVE", "national_material_id": str(mapping.national_material_id)},
+        after_state={"status": "INACTIVE"},
+        reason="Human unmapped material"
+    ))
+    db.commit()
+    return {"status": "success", "action": "UNMAP", "mapping_id": str(mapping.id)}

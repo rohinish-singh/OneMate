@@ -97,18 +97,18 @@ def test_e2e_pipeline(client: TestClient, db: Session):
     # Extract rec_ids from queue
     q_rec_ids = [q["recommendation_id"] for q in queue]
 
-    # 10. Human ACCEPT on incomplete -> should fail
-    # Let's find a SAME rec for A-003 against C-003
-    c3 = db.query(Material).filter_by(source_material_code="C-003", cpse_id=cpse_c.id).first()
-    rec_a3_c3 = db.query(MatchRecommendation).filter_by(source_material_id=a3.id, candidate_material_id=c3.id).first()
+    # 10. Human ACCEPT on asymmetric incomplete (A-003 missing trim vs C-002 with SS316 trim) -> should fail
+    c2 = db.query(Material).filter_by(source_material_code="C-002", cpse_id=cpse_c.id).first()
+    rec_a3_c2 = db.query(MatchRecommendation).filter_by(source_material_id=a3.id, candidate_material_id=c2.id).first()
+    assert rec_a3_c2 is not None
 
-    assert rec_a3_c3 is not None
-
-    resp_accept_invalid = client.post(f"/api/v1/reviews/{rec_a3_c3.id}/action", json={"action": "ACCEPT"}, headers=headers)
+    resp_accept_invalid = client.post(f"/api/v1/reviews/{rec_a3_c2.id}/action", json={"action": "ACCEPT"}, headers=headers)
     assert resp_accept_invalid.status_code == 400
-    assert "incomplete identity" in resp_accept_invalid.json()["detail"].lower()
+    assert "asymmetric" in resp_accept_invalid.json()["detail"].lower()
 
     # 11. Human OVERRIDE on A-003
+    c3 = db.query(Material).filter_by(source_material_code="C-003", cpse_id=cpse_c.id).first()
+    rec_a3_c3 = db.query(MatchRecommendation).filter_by(source_material_id=a3.id, candidate_material_id=c3.id).first()
     nm_target = map_a1.national_material_id # We'll just map it to the known complete one
     resp_override = client.post(f"/api/v1/reviews/{rec_a3_c3.id}/action", json={
         "action": "OVERRIDE", "reason": "Standardizing to SS304", "national_material_id": str(nm_target)

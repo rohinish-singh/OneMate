@@ -1,13 +1,13 @@
 import uuid
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+
 
 from app.models import (
     Material, NationalMaterial, MatchRecommendation,
     MaterialNationalMapping, AuditLog
 )
-from app.services.harmonization import get_identity_key, generate_canonical_desc
+
 
 def get_review_queue(db: Session, limit: int = 150) -> List[Dict[str, Any]]:
     """
@@ -95,19 +95,41 @@ def process_review_action(
 
     src = db.get(Material, rec.source_material_id)
     cand = db.get(Material, rec.candidate_material_id)
+    if not src or not cand:
+        raise ValueError("Source or candidate material not found.")
 
-    # Check mapping safety
+    # Query any active mapping on source material
     existing_mapping = db.query(MaterialNationalMapping).filter_by(
         material_id=src.id, status="ACTIVE"
     ).first()
 
-    if existing_mapping:
-        raise ValueError("Material already has an ACTIVE mapping. Unmap or explicitly remap first.")
-
     mapping = None
     nm = None
 
-    if action == "ACCEPT":
+    if action == "UNMAP":
+        if not existing_mapping:
+            raise ValueError("Material does not have an ACTIVE mapping to unmap.")
+
+        existing_mapping.status = "INACTIVE"
+        db.add(AuditLog(
+            id=uuid.uuid4(),
+            actor=actor,
+            action="UNMAP",
+            entity_type="MATERIAL_NATIONAL_MAPPING",
+            entity_id=str(existing_mapping.id),
+            before_state={"status": "ACTIVE", "national_material_id": str(existing_mapping.national_material_id)},
+            after_state={"status": "INACTIVE"},
+            reason=reason or f"Unmapped via recommendation {rec.id}"
+        ))
+        db.commit()
+        return {
+            "status": "success",
+            "action": "UNMAP",
+            "mapping_id": str(existing_mapping.id),
+            "national_material_id": str(existing_mapping.national_material_id)
+        }
+
+    elif action == "ACCEPT":
         # 1. Check for attribute conflicts and asymmetric missing information
         identity_attrs = [
             "category",
@@ -147,17 +169,68 @@ def process_review_action(
         # Re-use or Create NM
         nm = db.query(NationalMaterial).filter_by(identity_key=identity_key).first()
         if not nm:
-            canonical_desc_parts = [
-                src.valve_type,
-                "VALVE",
-                src.size,
-                src.body_material,
-                src.pressure_class,
-                src.connection_type
-            ]
-            if src.trim and src.trim != "UNKNOWN":
-                canonical_desc_parts.append(f"{src.trim} TRIM")
-            canonical_desc = " ".join(p for p in canonical_desc_parts if p)
+            canonical_desc_parts = []
+            if src.category == "VALVE":
+                canonical_desc_parts = [
+                    src.valve_type,
+                    "VALVE",
+                    src.size,
+                    src.body_material,
+                    src.pressure_class,
+                    src.connection_type
+                ]
+                if src.trim and src.trim != "UNKNOWN":
+                    canonical_desc_parts.append(f"{src.trim} TRIM")
+            elif src.category == "FLANGE":
+                canonical_desc_parts = [
+                    "FLANGE",
+                    src.size,
+                    src.body_material,
+                    src.pressure_class,
+                    src.connection_type
+                ]
+            elif src.category == "PUMP":
+                canonical_desc_parts = [
+                    "PUMP",
+                    src.size,
+                    src.body_material,
+                    src.pressure_class
+                ]
+            elif src.category == "GASKET":
+                canonical_desc_parts = [
+                    "GASKET",
+                    src.size,
+                    src.body_material,
+                    src.pressure_class
+                ]
+            elif src.category == "FASTENER":
+                canonical_desc_parts = [
+                    "FASTENER",
+                    src.size,
+                    src.body_material
+                ]
+            elif src.category == "BEARING":
+                canonical_desc_parts = [
+                    "BEARING",
+                    src.size,
+                    src.body_material
+                ]
+            else:
+                canonical_desc_parts = [
+                    src.category,
+                    src.valve_type,
+                    src.size,
+                    src.body_material,
+                    src.pressure_class,
+                    src.connection_type,
+                    src.trim
+                ]
+
+            valid_parts = [p for p in canonical_desc_parts if p and p != "UNKNOWN"]
+            if valid_parts:
+                canonical_desc = " ".join(valid_parts)
+            else:
+                canonical_desc = src.normalized_description or src.source_description or "CANONICAL MATERIAL"
 
             nm = NationalMaterial(
                 id=uuid.uuid4(),
@@ -189,6 +262,20 @@ def process_review_action(
                 reason=reason or f"Human confirmed SAME from recommendation {rec.id}"
             ))
 
+        # Check existing active mapping
+        if existing_mapping:
+            if existing_mapping.recommendation_id == rec.id:
+                # Idempotent success: Already mapped to this exact recommendation
+                return {
+                    "status": "success",
+                    "action": "ACCEPT",
+                    "mapping_id": str(existing_mapping.id),
+                    "national_material_id": str(nm.id)
+                }
+            else:
+                # Genuine conflict: Mapped through another recommendation
+                raise ValueError("Material already has an ACTIVE mapping. Unmap or explicitly remap first.")
+
         # Create mapping
         mapping = MaterialNationalMapping(
             id=uuid.uuid4(),
@@ -208,6 +295,20 @@ def process_review_action(
         nm = db.get(NationalMaterial, national_material_id)
         if not nm:
             raise ValueError("Target NationalMaterial does not exist.")
+
+        # If previous active mapping exists, explicitly deactivate it
+        if existing_mapping:
+            existing_mapping.status = "INACTIVE"
+            db.add(AuditLog(
+                id=uuid.uuid4(),
+                actor=actor,
+                action="UNMAP",
+                entity_type="MATERIAL_NATIONAL_MAPPING",
+                entity_id=str(existing_mapping.id),
+                before_state={"status": "ACTIVE", "national_material_id": str(existing_mapping.national_material_id)},
+                after_state={"status": "INACTIVE"},
+                reason=f"Superseded by OVERRIDE to {national_material_id}"
+            ))
 
         mapping = MaterialNationalMapping(
             id=uuid.uuid4(),

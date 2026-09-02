@@ -106,6 +106,48 @@ Core design principle:
 
 ## How It Works
 
+### Supported Material Categories
+- VALVE
+- PUMP
+- GASKET
+- FLANGE
+- BEARING
+- FASTENER
+
+### Important Engineering Principles
+- Deterministic engineering rules are authoritative
+- Hard technical conflicts override similarity
+- `UNKNOWN`/`NULL` is not a wildcard
+- Uncertain cases require human review
+- Audit history is preserved
+- Matching is cross-CPSE
+- `candidate.id != source.id`
+- `candidate.cpse_id != source.cpse_id`
+
+### Matching
+- Candidate selection happens globally across CPSEs
+- Self‑matching is prohibited
+- Same‑CPSE matching is prohibited
+- Technical attributes drive comparison
+- Classifications: `SAME`, `POTENTIALLY_EQUIVALENT`, `DIFFERENT`
+
+### Normalization
+- Deterministic attribute extraction for valve attributes (valve type, size, body material, pressure class, connection type, trim, normalized UOM)
+- No ML/LLM based normalization
+
+### Review Governance
+- Actions: `ACCEPT`, `REJECT`, `MARK_DIFFERENT`, `UNMAP`, `OVERRIDE`
+- `ACCEPT` is idempotent for the same active recommendation
+- Conflicting remaps are explicitly governed
+- Review actions produce audit records
+
+### National Materials
+- Canonical material records are created and mapped to source materials
+- Source‑to‑national mapping is maintained without claiming external integrations
+
+### Audit
+- All material mapping and review actions are recorded in an immutable audit log
+
 **1. Register a CPSE** — create the enterprise source namespace for a
 catalog.
 

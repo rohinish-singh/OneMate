@@ -26,12 +26,17 @@ Do not reinterpret a deferred feature as a changed business rule.
 
 ---
 
-# 1. ONLY ONE DEMONSTRATION CATEGORY
+# 1. SUPPORTED MATERIAL CATEGORIES
 
-The MVP supports exactly ONE primary material category:
+The MVP supports the following material categories:
 
 ```text
 VALVE
+PUMP
+GASKET
+FLANGE
+BEARING
+FASTENER
 ```
 
 Do NOT build a generic category-schema engine.

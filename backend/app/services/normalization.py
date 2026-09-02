@@ -38,6 +38,19 @@ def normalize_uom(uom: str) -> Optional[str]:
     # Remove plural S if safe, but dictionary covers most
     return UOM_MAPPING.get(clean_uom, None)
 
+def normalize_trim_grade(raw_trim: str) -> Optional[str]:
+    """
+    Standardizes trim grade to canonical representation (e.g. SS304, SS316).
+    """
+    if not raw_trim:
+        return None
+    raw = normalize_text(raw_trim)
+    if re.search(r'\b(SS\s*304|304\s*SS|304)\b', raw):
+        return "SS304"
+    if re.search(r'\b(SS\s*316|316\s*SS|316)\b', raw):
+        return "SS316"
+    return raw
+
 def extract_trim(text: str) -> Tuple[Optional[str], str]:
     """
     Extracts trim explicitly. Returns (trim, text_without_trim)
@@ -46,35 +59,53 @@ def extract_trim(text: str) -> Tuple[Optional[str], str]:
     if not text:
         return None, text
 
-    # 1. Match "... TRIM", but don't match "VALVE TRIM" (which just means the valve's trim)
+    # 1. Match "... TRIM" (e.g. "SS316 TRIM", "316SS TRIM", "316 SS TRIM", "SS 316 TRIM", "316 TRIM", "8 TRIM")
+    match_ss_trim = re.search(r'\b(SS\s*304|304\s*SS|304|SS\s*316|316\s*SS|316)\s+TRIM\b', text)
+    if match_ss_trim:
+        trim_raw = match_ss_trim.group(1)
+        new_text = text[:match_ss_trim.start()] + text[match_ss_trim.end():]
+        return normalize_trim_grade(trim_raw), normalize_text(new_text)
+
     match1 = re.search(r'\b([A-Z0-9.\-]+)\s+TRIM\b', text)
     if match1 and match1.group(1) != "VALVE":
-        trim = match1.group(1)
-        # Remove it from text
+        trim_raw = match1.group(1)
         new_text = text[:match1.start()] + text[match1.end():]
-        return trim, normalize_text(new_text)
+        return normalize_trim_grade(trim_raw), normalize_text(new_text)
 
     # 2. Match "TRIM ..."
+    match_trim_ss = re.search(r'\bTRIM\s+(SS\s*304|304\s*SS|304|SS\s*316|316\s*SS|316)\b', text)
+    if match_trim_ss:
+        trim_raw = match_trim_ss.group(1)
+        new_text = text[:match_trim_ss.start()] + text[match_trim_ss.end():]
+        return normalize_trim_grade(trim_raw), normalize_text(new_text)
+
     match2 = re.search(r'\bTRIM\s+([A-Z0-9.\-]+)\b', text)
     if match2:
-        trim = match2.group(1)
-        # Remove it from text
+        trim_raw = match2.group(1)
         new_text = text[:match2.start()] + text[match2.end():]
-        return trim, normalize_text(new_text)
+        return normalize_trim_grade(trim_raw), normalize_text(new_text)
 
-    # 3. Match trailing trim grade (e.g. SS304, SS316) ONLY when a separate primary body material is also present earlier in the text
-    match_trailing = re.search(r'\b(SS304|SS316|304|316)\s*$', text)
+    # 3. Match trailing trim grade (e.g. 316SS, SS316, 316 SS, SS 316, 304SS, SS304, 304 SS, SS 304, 316, 304)
+    # ONLY when a separate primary body material is also present earlier in the text
+    match_trailing = re.search(r'\b(SS\s*304|304\s*SS|SS\s*316|316\s*SS|SS304|SS316|304|316)\s*$', text)
     if match_trailing:
         prefix = text[:match_trailing.start()]
         has_primary_body = bool(re.search(r'\b(CS|C\.S\.|CARBON STEEL|WCB|CAST STEEL|CAST IRON|CI|SS|STAINLESS STEEL|CF8M|CF8)\b', prefix))
         if has_primary_body:
-            trim = match_trailing.group(1)
-            if trim == "304":
-                trim = "SS304"
-            elif trim == "316":
-                trim = "SS316"
+            trim_raw = match_trailing.group(1)
             new_text = prefix + text[match_trailing.end():]
-            return trim, normalize_text(new_text)
+            return normalize_trim_grade(trim_raw), normalize_text(new_text)
+
+    # 4. Match explicit compound trim grade (e.g. 316SS, 304SS, 316 SS, SS 316) anywhere in text when primary body exists
+    match_grade = re.search(r'\b(304\s*SS|316\s*SS|SS\s*304|SS\s*316)\b', text)
+    if match_grade:
+        prefix = text[:match_grade.start()]
+        suffix = text[match_grade.end():]
+        other_text = prefix + " " + suffix
+        has_primary_body = bool(re.search(r'\b(CS|C\.S\.|CARBON STEEL|WCB|CAST STEEL|CAST IRON|CI|SS|STAINLESS STEEL|CF8M|CF8)\b', other_text))
+        if has_primary_body:
+            trim_raw = match_grade.group(1)
+            return normalize_trim_grade(trim_raw), normalize_text(other_text)
 
     return None, text
 

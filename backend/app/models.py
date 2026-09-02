@@ -100,7 +100,7 @@ class NationalMaterial(Base):
     mappings = relationship("MaterialNationalMapping", back_populates="national_material")
 
     __table_args__ = (
-        CheckConstraint("category = 'VALVE'", name="chk_national_material_category_valve"),
+        CheckConstraint("category IN ('VALVE', 'PUMP', 'GASKET', 'FLANGE', 'BEARING', 'FASTENER')", name="chk_national_material_category_valid"),
     )
 
 

@@ -3,7 +3,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from app.models import CPSE, Material, MatchRecommendation
-from app.services.matching import classify_match, create_match_recommendations
+from app.services.matching import classify_match, create_match_recommendations, generate_candidates
 
 @pytest.fixture
 def cpse_a(db):
@@ -215,3 +215,27 @@ def test_api_endpoint(client: TestClient, db, cpse_a, cpse_b):
     assert data["candidate_count"] > 0
     assert data["recommendations_created"] > 0
     assert any(r["candidate_id"] == str(m2.id) for r in data["recommendations"])
+
+def test_same_cpse_and_self_candidate_exclusion(db, cpse_a, cpse_b):
+    # Material in CPSE A (source)
+    m_src = create_mat(db, cpse_a, {"desc": "GATE VALVE DN50 CS CLASS150 RF SS316", "valve_type": "GATE", "size": "DN50"})
+    # Material in CPSE A (same CPSE candidate)
+    m_same_cpse = create_mat(db, cpse_a, {"desc": "GATE VALVE DN50 CS CLASS150 RF SS316", "valve_type": "GATE", "size": "DN50"})
+    # Material in CPSE B (different CPSE candidate)
+    m_other_cpse = create_mat(db, cpse_b, {"desc": "GATE VALVE DN50 CS CLASS150 RF SS316", "valve_type": "GATE", "size": "DN50"})
+
+    # Check generate_candidates output directly
+    candidates = generate_candidates(db, m_src)
+    cand_ids = [c.id for c in candidates]
+
+    assert m_src.id not in cand_ids, "Source material itself must be excluded from candidates"
+    assert m_same_cpse.id not in cand_ids, "Candidate from same CPSE must be excluded from candidates"
+    assert m_other_cpse.id in cand_ids, "Valid candidate from another CPSE must be included"
+
+    # Check create_match_recommendations output
+    recs = create_match_recommendations(db, m_src)
+    rec_cand_ids = [r.candidate_material_id for r in recs]
+
+    assert m_src.id not in rec_cand_ids, "Source material itself must never be recommended"
+    assert m_same_cpse.id not in rec_cand_ids, "Material from same CPSE must never be recommended"
+    assert m_other_cpse.id in rec_cand_ids, "Material from another CPSE must be recommended"

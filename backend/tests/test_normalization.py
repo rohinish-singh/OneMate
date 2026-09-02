@@ -101,7 +101,7 @@ def test_norm_trim(db, test_cpse):
 
     mat2 = create_raw_material(db, test_cpse, "VALVE 316 TRIM")
     normalize_material_record(db, mat2)
-    assert mat2.trim == "316"
+    assert mat2.trim == "SS316"
 
     mat3 = create_raw_material(db, test_cpse, "VALVE", specs="TRIM 8")
     normalize_material_record(db, mat3)
@@ -110,6 +110,63 @@ def test_norm_trim(db, test_cpse):
     mat_missing = create_raw_material(db, test_cpse, "VALVE SS CS")
     normalize_material_record(db, mat_missing)
     assert mat_missing.trim is None
+
+def test_ss_trim_normalization_regression_cases(db, test_cpse):
+    # 1. BALL VALVE DN100 CS CLASS600 RF 316SS -> trim == SS316
+    m1 = create_raw_material(db, test_cpse, "BALL VALVE DN100 CS CLASS600 RF 316SS")
+    normalize_material_record(db, m1)
+    assert m1.trim == "SS316"
+    assert m1.body_material == "CARBON_STEEL"
+
+    # 2. BALL VALVE DN100 CS CLASS600 RF SS316 -> trim == SS316
+    m2 = create_raw_material(db, test_cpse, "BALL VALVE DN100 CS CLASS600 RF SS316")
+    normalize_material_record(db, m2)
+    assert m2.trim == "SS316"
+    assert m2.body_material == "CARBON_STEEL"
+
+    # 3. BALL VALVE DN100 CS CLASS600 RF 316 SS -> trim == SS316
+    m3 = create_raw_material(db, test_cpse, "BALL VALVE DN100 CS CLASS600 RF 316 SS")
+    normalize_material_record(db, m3)
+    assert m3.trim == "SS316"
+    assert m3.body_material == "CARBON_STEEL"
+
+    # 4. BALL VALVE DN100 CS CLASS600 RF SS 316 -> trim == SS316
+    m4 = create_raw_material(db, test_cpse, "BALL VALVE DN100 CS CLASS600 RF SS 316")
+    normalize_material_record(db, m4)
+    assert m4.trim == "SS316"
+    assert m4.body_material == "CARBON_STEEL"
+
+    # 5. BALL VALVE DN50 CARBON STEEL CLASS300 RF SS304 -> trim == SS304
+    m5 = create_raw_material(db, test_cpse, "BALL VALVE DN50 CARBON STEEL CLASS300 RF SS304")
+    normalize_material_record(db, m5)
+    assert m5.trim == "SS304"
+    assert m5.body_material == "CARBON_STEEL"
+
+    # 6. BALL VALVE DN50 CARBON STEEL CLASS300 RF 304SS -> trim == SS304
+    m6 = create_raw_material(db, test_cpse, "BALL VALVE DN50 CARBON STEEL CLASS300 RF 304SS")
+    normalize_material_record(db, m6)
+    assert m6.trim == "SS304"
+    assert m6.body_material == "CARBON_STEEL"
+
+    # 7. VALVE GATE 100MM STAINLESS STEEL CL150 RAISED FACE 316SS -> trim == SS316
+    m7 = create_raw_material(db, test_cpse, "VALVE GATE 100MM STAINLESS STEEL CL150 RAISED FACE 316SS")
+    normalize_material_record(db, m7)
+    assert m7.trim == "SS316"
+    assert m7.body_material == "STAINLESS_STEEL"
+    assert m7.valve_type == "GATE"
+    assert m7.size == "DN100"
+    assert m7.pressure_class == "CLASS150"
+    assert m7.connection_type == "RF"
+
+    # 8. BALL VALVE 4 IN CS CLASS600 RF SS316 TRIM -> trim == SS316
+    m8 = create_raw_material(db, test_cpse, "BALL VALVE 4 IN CS CLASS600 RF SS316 TRIM")
+    normalize_material_record(db, m8)
+    assert m8.trim == "SS316"
+    assert m8.body_material == "CARBON_STEEL"
+    assert m8.valve_type == "BALL"
+    assert m8.size == "DN100"
+    assert m8.pressure_class == "CLASS600"
+    assert m8.connection_type == "RF"
 
 def test_norm_missing_attributes_are_null(db, test_cpse):
     mat = create_raw_material(db, test_cpse, "VALVE")

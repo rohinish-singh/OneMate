@@ -97,7 +97,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* Editorial Typographic Summary Strip */}
-      <div className="rounded-panel border border-border bg-border shadow-xs grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-px overflow-hidden">
+      <div className="rounded-panel border border-border bg-border shadow-xs grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px overflow-hidden">
         {/* 1. Materials */}
         <div className="p-4 sm:p-5 bg-surface flex flex-col justify-between space-y-2">
           <div>
@@ -143,22 +143,7 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
 
-        {/* 4. Automation */}
-        <div className="p-4 sm:p-5 bg-surface flex flex-col justify-between space-y-2">
-          <div>
-            <span className="text-xs font-semibold text-charcoal-caption uppercase tracking-wider block">
-              Automation
-            </span>
-            <div className="font-mono text-2xl lg:text-3xl font-bold text-charcoal mt-1">
-              {harmonization.automation_rate_percentage}%
-            </div>
-          </div>
-          <p className="text-xs text-charcoal-muted">
-            auto-harmonized
-          </p>
-        </div>
-
-        {/* 5. Pending Review */}
+        {/* 4. Pending Review */}
         <div className="p-4 sm:p-5 bg-surface-secondary/40 flex flex-col justify-between space-y-2">
           <div>
             <span className="text-xs font-semibold text-charcoal-caption uppercase tracking-wider block">
@@ -180,7 +165,7 @@ export const DashboardPage: React.FC = () => {
           </button>
         </div>
 
-        {/* 6. Decisions Recorded */}
+        {/* 5. Decisions Recorded */}
         <div className="p-4 sm:p-5 bg-surface flex flex-col justify-between space-y-2">
           <div>
             <span className="text-xs font-semibold text-charcoal-caption uppercase tracking-wider block">
