@@ -551,3 +551,196 @@ def test_accept_flange_category_succeeds(client: TestClient, db, test_cpse):
     assert nm is not None
     assert nm.category == "FLANGE"
     assert "FLANGE" in nm.canonical_description
+
+
+def test_mapped_via_material_id_lookup(client: TestClient, db, test_cpse):
+    """
+    Verifies that a SAME recommendation whose source material has an ACTIVE mapping
+    (linked to a DIFFERENT recommendation_id, as created by harmonize_same_families)
+    still shows as MAPPED in the review queue.
+
+    Also verifies that DIFFERENT and POTENTIALLY_EQUIVALENT recommendations for the
+    same source material retain their own classification status even when the source
+    is mapped — they should NOT be promoted to MAPPED.
+    """
+    from app.services.review import get_review_queue
+
+    m_src = create_mat(db, test_cpse)
+    m_cand_same_1 = create_mat(db, test_cpse)  # linked to the mapping (r_same_1)
+    m_cand_same_2 = create_mat(db, test_cpse)  # SAME rec NOT linked to the mapping
+    m_cand_diff = create_mat(db, test_cpse)
+    m_cand_pot = create_mat(db, test_cpse)
+
+    r_same_1 = create_rec(db, m_src, m_cand_same_1, "SAME")
+    r_same_2 = create_rec(db, m_src, m_cand_same_2, "SAME")   # not linked to mapping
+    r_diff = create_rec(db, m_src, m_cand_diff, "DIFFERENT")
+    r_pot = create_rec(db, m_src, m_cand_pot, "POTENTIALLY_EQUIVALENT")
+
+    # Create NM and mapping linked to r_same_1 only (simulating harmonize_same_families)
+    nm = NationalMaterial(
+        id=uuid.uuid4(),
+        national_code=f"NM-MATID-{uuid.uuid4().hex[:6]}",
+        identity_key=f"MATID-KEY-{uuid.uuid4()}",
+        canonical_description="BALL VALVE DN50 CS CLASS300 RF SS304 TRIM",
+        category="VALVE",
+        valve_type="BALL",
+        size="DN50",
+        body_material="CARBON_STEEL",
+        pressure_class="CLASS300",
+        connection_type="RF",
+        trim="SS304",
+        normalized_uom="EACH",
+        status="ACTIVE"
+    )
+    db.add(nm)
+    db.flush()
+
+    mapping = MaterialNationalMapping(
+        id=uuid.uuid4(),
+        material_id=m_src.id,
+        national_material_id=nm.id,
+        basis="AUTO_SAME",
+        status="ACTIVE",
+        recommendation_id=r_same_1.id  # only r_same_1 is directly linked
+    )
+    db.add(mapping)
+    db.commit()
+
+    queue = get_review_queue(db)
+    q_map = {item["recommendation_id"]: item for item in queue}
+
+    # r_same_1: directly linked via recommendation_id → MAPPED
+    assert q_map[str(r_same_1.id)]["mapping_status"] == "MAPPED"
+    assert q_map[str(r_same_1.id)]["national_material_code"] == nm.national_code
+
+    # r_same_2: SAME rec, source is mapped, but rec_id not directly linked → must also be MAPPED
+    assert q_map[str(r_same_2.id)]["mapping_status"] == "MAPPED", (
+        "SAME rec for a mapped source material should show as MAPPED even if rec_id not linked"
+    )
+    assert q_map[str(r_same_2.id)]["national_material_code"] == nm.national_code
+
+    # r_diff: DIFFERENT → must stay DIFFERENT even though source is mapped
+    assert q_map[str(r_diff.id)]["mapping_status"] == "DIFFERENT", (
+        "DIFFERENT rec should not be promoted to MAPPED"
+    )
+    assert q_map[str(r_diff.id)]["national_material_code"] is None
+
+    # r_pot: POTENTIALLY_EQUIVALENT → must stay NEEDS REVIEW even though source is mapped
+    assert q_map[str(r_pot.id)]["mapping_status"] == "NEEDS REVIEW", (
+        "POTENTIALLY_EQUIVALENT rec should not be promoted to MAPPED"
+    )
+    assert q_map[str(r_pot.id)]["national_material_code"] is None
+
+
+def test_review_queue_cpse_scoping(client: TestClient, db):
+    """
+    Focused verification of CPSE-scoped review queue:
+    1. Querying with cpse_id=CPSE_A returns ONLY recommendations involving CPSE_A (as source OR candidate).
+    2. Unrelated CPSE C -> CPSE B recommendations are strictly excluded.
+    3. Mapped SAME rows for CPSE A materials appear as MAPPED.
+    4. Multiple valid recommendation rows for one mapped material are preserved (e.g. A->B and A->C).
+    5. POTENTIALLY_EQUIVALENT recommendations remain NEEDS REVIEW.
+    6. DIFFERENT recommendations remain DIFFERENT.
+    7. Review actions on scoped recommendations execute successfully.
+    """
+    suffix = uuid.uuid4().hex[:6]
+    cpse_a = CPSE(code=f"CPSE-A-{suffix}", name=f"ScopeCpseA{suffix}")
+    cpse_b = CPSE(code=f"CPSE-B-{suffix}", name=f"ScopeCpseB{suffix}")
+    cpse_c = CPSE(code=f"CPSE-C-{suffix}", name=f"ScopeCpseC{suffix}")
+    db.add_all([cpse_a, cpse_b, cpse_c])
+    db.commit()
+
+    m_a1 = create_mat(db, cpse_a)
+    m_a2 = create_mat(db, cpse_a)
+    m_b1 = create_mat(db, cpse_b)
+    m_c1 = create_mat(db, cpse_c)
+
+    # Recommendations involving CPSE A:
+    # 1. m_a1 (source) -> m_b1 (candidate) [SAME]
+    rec_a_b = create_rec(db, m_a1, m_b1, "SAME")
+    # 2. m_a1 (source) -> m_c1 (candidate) [SAME] - multiple recommendation rows for m_a1
+    rec_a_c = create_rec(db, m_a1, m_c1, "SAME")
+    # 3. m_c1 (source) -> m_a1 (candidate) [SAME] - CPSE A is candidate
+    rec_c_a = create_rec(db, m_c1, m_a1, "SAME")
+    # 4. m_a2 (source) -> m_b1 (candidate) [DIFFERENT]
+    rec_a_diff = create_rec(db, m_a2, m_b1, "DIFFERENT")
+    # 5. m_a2 (source) -> m_c1 (candidate) [POTENTIALLY_EQUIVALENT]
+    rec_a_pot = create_rec(db, m_a2, m_c1, "POTENTIALLY_EQUIVALENT")
+
+    # Unrelated recommendations (CPSE C -> CPSE B): neither source nor candidate belongs to CPSE A!
+    rec_unrelated_same = create_rec(db, m_c1, m_b1, "SAME")
+    rec_unrelated_diff = create_rec(db, m_c1, m_b1, "DIFFERENT")
+
+    # Active mapping for m_a1
+    nm = NationalMaterial(
+        id=uuid.uuid4(),
+        national_code=f"NM-SCOPE-{uuid.uuid4().hex[:6]}",
+        identity_key=f"SCOPE-KEY-{uuid.uuid4()}",
+        canonical_description="BALL VALVE DN50 CS CLASS300 RF SS304 TRIM",
+        category="VALVE",
+        valve_type="BALL",
+        size="DN50",
+        body_material="CARBON_STEEL",
+        pressure_class="CLASS300",
+        connection_type="RF",
+        trim="SS304",
+        normalized_uom="EACH",
+        status="ACTIVE"
+    )
+    db.add(nm)
+    db.flush()
+
+    mapping_a = MaterialNationalMapping(
+        id=uuid.uuid4(),
+        material_id=m_a1.id,
+        national_material_id=nm.id,
+        basis="AUTO_SAME",
+        status="ACTIVE",
+        recommendation_id=rec_a_b.id
+    )
+    db.add(mapping_a)
+    db.commit()
+
+    # Query queue with cpse_id=cpse_a.id via API
+    headers = {"X-Reviewer-Token": settings.reviewer_token}
+    resp = client.get(f"/api/v1/reviews/queue?cpse_id={cpse_a.id}", headers=headers)
+    assert resp.status_code == 200
+    queue = resp.json()["queue"]
+    q_map = {item["recommendation_id"]: item for item in queue}
+
+    # 1. Verify CPSE A rows are present
+    assert str(rec_a_b.id) in q_map, "rec_a_b should be present"
+    assert str(rec_a_c.id) in q_map, "rec_a_c should be present (multiple rows for m_a1)"
+    assert str(rec_c_a.id) in q_map, "rec_c_a should be present (CPSE A as candidate)"
+    assert str(rec_a_diff.id) in q_map, "rec_a_diff should be present"
+    assert str(rec_a_pot.id) in q_map, "rec_a_pot should be present"
+
+    # 2. Verify unrelated C->B rows are strictly EXCLUDED
+    assert str(rec_unrelated_same.id) not in q_map, "Unrelated C->B SAME rec must be excluded from CPSE A queue"
+    assert str(rec_unrelated_diff.id) not in q_map, "Unrelated C->B DIFF rec must be excluded from CPSE A queue"
+
+    # 3. Verify MAPPED status on SAME recs involving m_a1
+    assert q_map[str(rec_a_b.id)]["mapping_status"] == "MAPPED"
+    assert q_map[str(rec_a_b.id)]["national_material_code"] == nm.national_code
+    assert q_map[str(rec_a_c.id)]["mapping_status"] == "MAPPED"
+    assert q_map[str(rec_a_c.id)]["national_material_code"] == nm.national_code
+    assert q_map[str(rec_c_a.id)]["mapping_status"] == "MAPPED"
+    assert q_map[str(rec_c_a.id)]["national_material_code"] == nm.national_code
+
+    # 4. Verify DIFFERENT remains DIFFERENT
+    assert q_map[str(rec_a_diff.id)]["mapping_status"] == "DIFFERENT"
+    assert q_map[str(rec_a_diff.id)]["classification"] == "DIFFERENT"
+
+    # 5. Verify POTENTIALLY_EQUIVALENT remains NEEDS REVIEW
+    assert q_map[str(rec_a_pot.id)]["mapping_status"] == "NEEDS REVIEW"
+    assert q_map[str(rec_a_pot.id)]["classification"] == "POTENTIALLY_EQUIVALENT"
+
+    # 6. Verify existing review actions still work on scoped recommendations
+    action_resp = client.post(
+        f"/api/v1/reviews/{rec_a_pot.id}/action",
+        json={"action": "MARK_DIFFERENT", "reason": "Confirmed different pressure class"},
+        headers=headers
+    )
+    assert action_resp.status_code == 200
+    assert action_resp.json()["status"] == "success"
+    assert action_resp.json()["action"] == "MARK_DIFFERENT"

@@ -69,7 +69,6 @@ class Material(Base):
 
     __table_args__ = (
         UniqueConstraint("cpse_id", "source_material_code", name="uq_material_cpse_source_code"),
-        CheckConstraint("category IS NULL OR category IN ('VALVE', 'PUMP', 'GASKET', 'FLANGE', 'BEARING', 'FASTENER')", name="chk_material_category_valid"),
         Index("ix_material_cpse_id", "cpse_id"),
         Index("ix_material_category", "category"),
     )
@@ -83,13 +82,15 @@ class NationalMaterial(Base):
     category = Column(String(50), nullable=False)
     canonical_description = Column(Text, nullable=False)
 
-    valve_type = Column(String(100), nullable=False)
-    size = Column(String(100), nullable=False)
-    body_material = Column(String(100), nullable=False)
-    pressure_class = Column(String(100), nullable=False)
-    connection_type = Column(String(100), nullable=False)
-    trim = Column(String(100), nullable=False)
-    normalized_uom = Column(String(50), nullable=False)
+    normalized_attributes = Column(JSONB, nullable=True)
+
+    valve_type = Column(String(100), nullable=True)
+    size = Column(String(100), nullable=True)
+    body_material = Column(String(100), nullable=True)
+    pressure_class = Column(String(100), nullable=True)
+    connection_type = Column(String(100), nullable=True)
+    trim = Column(String(100), nullable=True)
+    normalized_uom = Column(String(50), nullable=True)
 
     identity_key = Column(String(500), unique=True, nullable=False)
     status = Column(String(50), nullable=True)
@@ -99,9 +100,6 @@ class NationalMaterial(Base):
 
     mappings = relationship("MaterialNationalMapping", back_populates="national_material")
 
-    __table_args__ = (
-        CheckConstraint("category IN ('VALVE', 'PUMP', 'GASKET', 'FLANGE', 'BEARING', 'FASTENER')", name="chk_national_material_category_valid"),
-    )
 
 
 class MatchRecommendation(Base):

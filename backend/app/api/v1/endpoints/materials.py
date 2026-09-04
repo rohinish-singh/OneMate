@@ -9,6 +9,11 @@ from app.services.normalization import normalize_material_record
 from app.models import Material, MaterialNationalMapping, MatchRecommendation, NationalMaterial
 from app.services.matching import create_match_recommendations
 from app.services.harmonization import harmonize_material
+from app.services.ai.retrieval import compare_candidate_retrieval
+from app.services.ai.shadow import run_shadow_matching_analysis
+from app.services.ai.extraction import PatternMaterialExtractor, compare_material_profiles
+from app.services.ai.reranking import rerank_candidates_shadow
+from app.services.ai.explainability import MaterialExplanationService
 router = APIRouter()
 
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 MB
@@ -120,6 +125,159 @@ def match_material(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Matching failed: {str(e)}")
 
+
+@router.get("/{material_id}/candidate-comparison")
+def compare_candidates_endpoint(
+    material_id: uuid.UUID,
+    top_k: int | None = None,
+    min_similarity: float | None = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Phase 2A Diagnostic: Compare baseline deterministic candidate retrieval
+    against parallel AI semantic candidate retrieval.
+    Does NOT mutate mappings or create recommendations.
+    """
+    material = db.query(Material).filter(Material.id == material_id).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    try:
+        result = compare_candidate_retrieval(
+            db=db,
+            source=material,
+            top_k=top_k,
+            min_similarity=min_similarity,
+        )
+        return {
+            "status": "success",
+            **result.to_dict(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Candidate comparison failed: {str(e)}")
+
+
+@router.get("/{material_id}/shadow-match")
+def shadow_match_endpoint(
+    material_id: uuid.UUID,
+    top_k: int | None = None,
+    min_similarity: float | None = None,
+    category_filter: bool = True,
+    db: Session = Depends(get_db)
+):
+    """
+    Phase 2C Diagnostic: Shadow analysis comparing baseline match recommendations
+    against hypothetical hybrid union (Baseline UNION AI) recommendations.
+    Executes in memory: does NOT persist recommendations or mutate mappings.
+    """
+    material = db.query(Material).filter(Material.id == material_id).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    try:
+        report = run_shadow_matching_analysis(
+            db=db,
+            source=material,
+            top_k=top_k,
+            min_similarity=min_similarity,
+            category_filter=category_filter,
+        )
+        return {
+            "status": "success",
+            **report.to_dict(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Shadow matching analysis failed: {str(e)}")
+
+
+@router.get("/{material_id}/ai-profile")
+def get_material_ai_profile_endpoint(
+    material_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Phase 3A Diagnostic: Shadow-mode AI material profile extraction and comparison.
+    Extracts structured attributes from source description and compares against
+    existing deterministic normalization. Does NOT mutate database state.
+    """
+    material = db.query(Material).filter(Material.id == material_id).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    try:
+        extractor = PatternMaterialExtractor()
+        source_text = material.source_description or material.normalized_description or ""
+        ai_profile = extractor.extract(
+            text=source_text,
+            source_uom=material.source_uom,
+            category_hint=material.category,
+        )
+        report = compare_material_profiles(material, ai_profile)
+        return {
+            "status": "success",
+            **report.to_dict(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI profile extraction failed: {str(e)}")
+
+
+@router.get("/{material_id}/semantic-reranking")
+def get_material_semantic_reranking_endpoint(
+    material_id: uuid.UUID,
+    top_k: int = 15,
+    db: Session = Depends(get_db)
+):
+    """
+    Phase 3B Diagnostic: Shadow-mode semantic reranking and candidate comparison.
+    Reranks retrieved candidates using dense semantic similarity and evaluates
+    authoritative engineering constraints. Does NOT mutate database state or recommendations.
+    """
+    material = db.query(Material).filter(Material.id == material_id).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    try:
+        report = rerank_candidates_shadow(
+            db=db,
+            source=material,
+            top_k=top_k,
+        )
+        return {
+            "status": "success",
+            **report.to_dict(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Semantic reranking analysis failed: {str(e)}")
+
+
+@router.get("/{material_id}/candidate-explanation/{candidate_id}")
+def get_candidate_explanation_endpoint(
+    material_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Phase 4: Structured AI Explainability & Reviewer Intelligence endpoint.
+    Returns attribute-level comparisons, physical engineering conflicts, semantic evidence,
+    and audit trail for a material pair. Does NOT mutate database state.
+    """
+    source = db.query(Material).filter(Material.id == material_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Source material not found")
+
+    candidate = db.query(Material).filter(Material.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate material not found")
+
+    try:
+        service = MaterialExplanationService()
+        explanation = service.generate_explanation(source=source, candidate=candidate)
+        return {
+            "status": "success",
+            **explanation.to_dict(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate explanation: {str(e)}")
 
 
 @router.post("/{material_id}/harmonize")

@@ -25,6 +25,7 @@ import type {
   MaterialDetailResponse,
   ReviewActionType,
   ReviewActionResponse,
+  RecommendationExplanation,
   CPSE,
 } from '../types/api';
 import { useCpse } from '../context/CpseContext';
@@ -39,6 +40,7 @@ export const ReviewPage: React.FC = () => {
   const location = useLocation();
   const cpseScopeId = new URLSearchParams(location.search).get('cpseId');
   const { selectedCpse } = useCpse();
+  const effectiveCpseId = cpseScopeId || selectedCpse?.id;
   const [scopedCpse, setScopedCpse] = useState<CPSE | null>(null);
   const [cpsesMap, setCpsesMap] = useState<Record<string, CPSE>>({});
 
@@ -62,6 +64,7 @@ export const ReviewPage: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<ReviewQueueItem | null>(null);
   const [sourceDetail, setSourceDetail] = useState<MaterialDetailResponse | null>(null);
   const [candidateDetail, setCandidateDetail] = useState<MaterialDetailResponse | null>(null);
+  const [explanation, setExplanation] = useState<RecommendationExplanation | null>(null);
   const [detailsLoading, setDetailsLoading] = useState<boolean>(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
 
@@ -85,11 +88,9 @@ export const ReviewPage: React.FC = () => {
           });
           setCpsesMap(map);
 
-          if (cpseScopeId) {
-            const found = cpses.find((c) => c.id === cpseScopeId);
+          if (effectiveCpseId) {
+            const found = cpses.find((c) => c.id === effectiveCpseId);
             setScopedCpse(found || null);
-          } else if (selectedCpse) {
-            setScopedCpse(selectedCpse);
           } else {
             setScopedCpse(null);
           }
@@ -102,16 +103,17 @@ export const ReviewPage: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [cpseScopeId, selectedCpse]);
+  }, [effectiveCpseId]);
 
   // 1. Fetch Review Queue
-  const fetchQueue = useCallback(async (token: string) => {
+  const fetchQueue = useCallback(async (token: string, targetCpseId?: string) => {
     if (!token.trim()) return;
     setQueueLoading(true);
     setQueueError(null);
 
     try {
-      const data = await api.reviews.getQueue(token.trim());
+      const cpseToQuery = targetCpseId !== undefined ? targetCpseId : effectiveCpseId;
+      const data = await api.reviews.getQueue(token.trim(), cpseToQuery);
       setQueue(data.queue);
       setIsAuthenticated(true);
       setReviewerToken(token.trim());
@@ -133,7 +135,7 @@ export const ReviewPage: React.FC = () => {
       setQueueLoading(false);
       setAuthLoading(false);
     }
-  }, []);
+  }, [effectiveCpseId]);
 
   // Handle Token Submission
   const handleAuthenticate = (e: React.FormEvent) => {
@@ -144,7 +146,7 @@ export const ReviewPage: React.FC = () => {
     }
     setAuthLoading(true);
     setAuthError(null);
-    fetchQueue(tokenInput.trim());
+    fetchQueue(tokenInput.trim(), effectiveCpseId);
   };
 
   const handleLogout = () => {
@@ -159,14 +161,14 @@ export const ReviewPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!cpseScopeId) {
+    if (!effectiveCpseId) {
       setCpseScopeMaterialIds([]);
       return;
     }
 
     let isCancelled = false;
     api.materials
-      .listByCpse(cpseScopeId)
+      .listByCpse(effectiveCpseId)
       .then((materials) => {
         if (!isCancelled) {
           setCpseScopeMaterialIds(materials.map((item) => item.id));
@@ -181,7 +183,13 @@ export const ReviewPage: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [cpseScopeId]);
+  }, [effectiveCpseId]);
+
+  useEffect(() => {
+    if (reviewerToken) {
+      fetchQueue(reviewerToken, effectiveCpseId);
+    }
+  }, [effectiveCpseId, fetchQueue, reviewerToken]);
 
   useEffect(() => {
     if (reviewerToken) {
@@ -194,6 +202,7 @@ export const ReviewPage: React.FC = () => {
     if (!selectedItem) {
       setSourceDetail(null);
       setCandidateDetail(null);
+      setExplanation(null);
       setDetailsError(null);
       return;
     }
@@ -205,11 +214,13 @@ export const ReviewPage: React.FC = () => {
     Promise.all([
       api.materials.get(selectedItem.source_material_id),
       api.materials.get(selectedItem.candidate_material_id),
+      api.materials.getExplanation(selectedItem.source_material_id, selectedItem.candidate_material_id).catch(() => null),
     ])
-      .then(([src, cand]) => {
+      .then(([src, cand, exp]) => {
         if (!isCancelled) {
           setSourceDetail(src);
           setCandidateDetail(cand);
+          setExplanation(exp);
         }
       })
       .catch((err: unknown) => {
@@ -237,7 +248,7 @@ export const ReviewPage: React.FC = () => {
     setActionSuccessMessage(`Action "${res.action}" successfully recorded by backend.`);
     setIsAuthenticated(true);
     // Refresh queue
-    fetchQueue(reviewerToken);
+    fetchQueue(reviewerToken, effectiveCpseId);
     // Clear selection
     setSelectedItem(null);
     setSourceDetail(null);
@@ -263,6 +274,7 @@ export const ReviewPage: React.FC = () => {
   // Filter Queue Items
   const filteredQueue = queue.filter((item) => {
     const inCpseScope =
+      !effectiveCpseId ||
       cpseScopeMaterialIds.length === 0 ||
       cpseScopeMaterialIds.includes(item.source_material_id) ||
       cpseScopeMaterialIds.includes(item.candidate_material_id);
@@ -665,6 +677,76 @@ export const ReviewPage: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* 1.5 AI EXPLAINABILITY & ENGINEERING EVIDENCE PANEL */}
+                {explanation && (
+                  <div className="p-4 rounded-panel border border-border bg-surface shadow-xs space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <FileCode className="w-4 h-4 text-charcoal-muted" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-charcoal">
+                          AI Explainability &amp; Engineering Evidence
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-charcoal-caption font-medium">Semantic Similarity:</span>
+                        <span className="font-mono text-xs font-bold text-charcoal bg-surface-secondary px-2 py-0.5 rounded-badge border border-border">
+                          {Math.round(explanation.semantic_evidence.semantic_similarity_score * 100)}%
+                        </span>
+                        <span className="text-xs text-charcoal-caption font-medium ml-1">Reviewer Recommendation:</span>
+                        <Badge
+                          variant={
+                            explanation.recommended_action === 'AUTO_SAFE'
+                              ? 'same'
+                              : explanation.recommended_action === 'REVIEW_REQUIRED'
+                              ? 'potential'
+                              : 'diff'
+                          }
+                          className="text-xs font-semibold"
+                        >
+                          {explanation.recommended_action}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {/* Hard Engineering Conflicts Banner */}
+                    {explanation.engineering_conflicts.length > 0 && (
+                      <div className="p-3 rounded-input border border-semantic-diff-border bg-semantic-diff-bg text-semantic-diff-text text-xs space-y-1.5">
+                        <div className="flex items-center gap-2 font-bold tracking-wide">
+                          <AlertTriangle className="w-4 h-4 shrink-0 text-semantic-diff-text" />
+                          <span>AUTHORITATIVE ENGINEERING CONFLICTS DETECTED</span>
+                        </div>
+                        <ul className="list-disc list-inside space-y-1 pl-1 text-[11px] font-mono">
+                          {explanation.engineering_conflicts.map((conf, idx) => (
+                            <li key={idx}>
+                              <strong>{conf.attribute}:</strong> {conf.reason}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Semantic Summary & Safety Assessment */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      <div className="p-2.5 bg-surface-secondary/40 rounded-input border border-border/70 space-y-1">
+                        <span className="font-semibold text-[11px] uppercase tracking-wider text-charcoal-muted block">
+                          Semantic Intelligence
+                        </span>
+                        <p className="text-charcoal text-[11px] leading-relaxed">
+                          {explanation.semantic_evidence.summary}
+                        </p>
+                      </div>
+                      <div className="p-2.5 bg-surface-secondary/40 rounded-input border border-border/70 space-y-1">
+                        <span className="font-semibold text-[11px] uppercase tracking-wider text-charcoal-muted block">
+                          Safety &amp; Audit Assessment
+                        </span>
+                        <p className="text-charcoal text-[11px] leading-relaxed">
+                          {explanation.safety_assessment}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* 2. SIDE-BY-SIDE ENTITY SUMMARY HEADERS */}
                 {(() => {

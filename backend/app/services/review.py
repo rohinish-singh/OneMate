@@ -1,5 +1,6 @@
 import uuid
 from typing import List, Dict, Any
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 
@@ -9,18 +10,47 @@ from app.models import (
 )
 
 
-def get_review_queue(db: Session, limit: int = 150) -> List[Dict[str, Any]]:
+def get_review_queue(
+    db: Session,
+    limit: int = 500,
+    classification: str = None,
+    cpse_id: uuid.UUID = None,
+) -> List[Dict[str, Any]]:
     """
     Returns recommendations with authoritative mapping and classification state.
     Includes unresolved POTENTIALLY_EQUIVALENT recommendations, DIFFERENT recommendations,
     and recommendations associated with completed MAPPED records.
+
+    MAPPED detection uses two strategies:
+    1. recommendation_id match (for human-review-created mappings)
+    2. material_id active mapping lookup for either source or candidate (for auto-harmonized
+       materials where the linked recommendation may not be in the current page of results)
     """
-    recs = db.query(MatchRecommendation).order_by(MatchRecommendation.created_at.desc()).limit(limit).all()
+    query = db.query(MatchRecommendation)
+
+    if classification:
+        query = query.filter(MatchRecommendation.classification == classification)
+
+    if cpse_id:
+        cpse_mat_ids = db.query(Material.id).filter(Material.cpse_id == cpse_id)
+        query = query.filter(
+            or_(
+                MatchRecommendation.source_material_id.in_(cpse_mat_ids),
+                MatchRecommendation.candidate_material_id.in_(cpse_mat_ids),
+            )
+        )
+
+    recs = query.order_by(MatchRecommendation.created_at.desc()).limit(limit).all()
     if not recs:
         return []
 
     rec_ids = [rec.id for rec in recs]
-    mappings = db.query(
+    source_mat_ids = list({rec.source_material_id for rec in recs})
+    cand_mat_ids = list({rec.candidate_material_id for rec in recs})
+    all_mat_ids = list(set(source_mat_ids + cand_mat_ids))
+
+    # Primary: map by recommendation_id (for human-review-created mappings)
+    rec_id_mappings = db.query(
         MaterialNationalMapping.recommendation_id,
         MaterialNationalMapping.basis,
         NationalMaterial.id.label("nm_id"),
@@ -31,7 +61,21 @@ def get_review_queue(db: Session, limit: int = 150) -> List[Dict[str, Any]]:
         MaterialNationalMapping.recommendation_id.in_(rec_ids),
         MaterialNationalMapping.status == "ACTIVE"
     ).all()
-    mapping_dict = {row.recommendation_id: (row.national_code, row.nm_id, row.basis) for row in mappings}
+    rec_id_mapping_dict = {row.recommendation_id: (row.national_code, row.nm_id, row.basis) for row in rec_id_mappings}
+
+    # Secondary: map by material_id for either source or candidate
+    mat_id_mappings = db.query(
+        MaterialNationalMapping.material_id,
+        MaterialNationalMapping.basis,
+        NationalMaterial.id.label("nm_id"),
+        NationalMaterial.national_code
+    ).join(
+        NationalMaterial, MaterialNationalMapping.national_material_id == NationalMaterial.id
+    ).filter(
+        MaterialNationalMapping.material_id.in_(all_mat_ids),
+        MaterialNationalMapping.status == "ACTIVE"
+    ).all()
+    mat_id_mapping_dict = {row.material_id: (row.national_code, row.nm_id, row.basis) for row in mat_id_mappings}
 
     queue = []
     for rec in recs:
@@ -39,8 +83,17 @@ def get_review_queue(db: Session, limit: int = 150) -> List[Dict[str, Any]]:
         if not src:
             continue
 
-        if rec.id in mapping_dict:
-            nm_code, nm_id, basis = mapping_dict[rec.id]
+        # MAPPED detection: prefer recommendation_id match first.
+        # Fallback: if either the source or candidate material has an active mapping AND this rec is SAME,
+        # show as MAPPED (handles auto-harmonize where rec_id on mapping may differ from
+        # the specific rec in this page).
+        # DIFFERENT and POTENTIALLY_EQUIVALENT keep their own status even if a material is mapped.
+        if rec.id in rec_id_mapping_dict:
+            nm_code, nm_id, basis = rec_id_mapping_dict[rec.id]
+            m_status = "MAPPED"
+        elif rec.classification == "SAME" and (rec.source_material_id in mat_id_mapping_dict or rec.candidate_material_id in mat_id_mapping_dict):
+            mapped_mat_id = rec.source_material_id if rec.source_material_id in mat_id_mapping_dict else rec.candidate_material_id
+            nm_code, nm_id, basis = mat_id_mapping_dict[mapped_mat_id]
             m_status = "MAPPED"
         elif rec.classification == "POTENTIALLY_EQUIVALENT":
             nm_code, nm_id, basis = None, None, None
@@ -232,18 +285,22 @@ def process_review_action(
             else:
                 canonical_desc = src.normalized_description or src.source_description or "CANONICAL MATERIAL"
 
+            col_cat = (src.normalized_attributes or {}).get("category") or src.category or "VALVE"
+            col_cat = col_cat.upper().strip()
+
             nm = NationalMaterial(
                 id=uuid.uuid4(),
                 national_code=f"NM-{uuid.uuid4().hex[:8].upper()}",
                 identity_key=identity_key,
                 canonical_description=canonical_desc,
-                category=src.category or "VALVE",
-                valve_type=src.valve_type or "UNKNOWN",
-                size=src.size or "UNKNOWN",
-                body_material=src.body_material or "UNKNOWN",
-                pressure_class=src.pressure_class or "UNKNOWN",
-                connection_type=src.connection_type or "UNKNOWN",
-                trim=src.trim or "UNKNOWN",
+                category=col_cat,
+                normalized_attributes=src.normalized_attributes,
+                valve_type=src.valve_type if col_cat == "VALVE" else None,
+                size=src.size,
+                body_material=src.body_material,
+                pressure_class=src.pressure_class,
+                connection_type=src.connection_type,
+                trim=src.trim if col_cat == "VALVE" else None,
                 normalized_uom=src.normalized_uom or "EACH",
                 status="ACTIVE"
             )

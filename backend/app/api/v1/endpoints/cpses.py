@@ -123,12 +123,16 @@ def list_cpse_materials(
             nm_code, nm_id = None, None
             m_status = "NOT PROCESSED"
 
+        cat = m.category
+        if not cat and m.normalized_attributes and isinstance(m.normalized_attributes, dict):
+            cat = m.normalized_attributes.get("category")
+
         results.append(MaterialListResponse(
             id=m.id,
             cpse_id=m.cpse_id,
             source_material_code=m.source_material_code,
             source_description=m.source_description,
-            category=m.category,
+            category=cat,
             normalized_description=m.normalized_description,
             mapping_status=m_status,
             national_material_code=nm_code,
