@@ -650,17 +650,6 @@ onemate/
 **Category:** Software
 **Organization:** Ministry of Petroleum & Natural Gas — Chennai Petroleum Corporation Limited (CPCL)
 
----
-
-## Team
-
-| Member   | Role                                |
-| -------- | ----------------------------------- |
-| Rohinish | Backend, Architecture & Integration |
-| Dhruv    | Frontend / Product                  |
-| Shiven   | AI / Matching / Research            |
-
----
 
 ## License
 
