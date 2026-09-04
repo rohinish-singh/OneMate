@@ -275,45 +275,198 @@ export const MaterialInspector: React.FC<MaterialInspectorProps> = ({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-body-sm pt-1">
-                  <div className="p-2.5 bg-surface rounded-input border border-border/80">
-                    <span className="text-[11px] font-medium text-charcoal-muted block">Category</span>
-                    {renderValue(detail.category, true)}
-                  </div>
+                  {(() => {
+                    const normAttrs = (detail.normalized_attributes as Record<string, unknown>) || {};
+                    const rawCat = detail.category || (normAttrs.category as string) || null;
+                    const category = rawCat ? rawCat.toUpperCase() : null;
 
-                  <div className="p-2.5 bg-surface rounded-input border border-border/80">
-                    <span className="text-[11px] font-medium text-charcoal-muted block">Valve Type</span>
-                    {renderValue(detail.valve_type, true)}
-                  </div>
+                    const CATEGORY_SCHEMAS: Record<string, { label: string; key: string }[]> = {
+                      VALVE: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Valve Type', key: 'valve_type' },
+                        { label: 'Size', key: 'size' },
+                        { label: 'Pressure Class', key: 'pressure_class' },
+                        { label: 'Body Material', key: 'body_material' },
+                        { label: 'Connection Type', key: 'connection_type' },
+                        { label: 'Trim Material', key: 'trim' },
+                        { label: 'Seat Material', key: 'seat_material' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      STRAINER: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Strainer Type', key: 'type' },
+                        { label: 'Size', key: 'size' },
+                        { label: 'Pressure Rating', key: 'pressure_rating' },
+                        { label: 'Material Grade', key: 'material_grade' },
+                        { label: 'Mesh', key: 'mesh' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      PIPE: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Construction', key: 'construction' },
+                        { label: 'Size', key: 'size' },
+                        { label: 'Schedule', key: 'schedule' },
+                        { label: 'Material Grade', key: 'material_grade' },
+                        { label: 'Standard Grade', key: 'standard_grade' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      FLANGE: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Flange Type', key: 'flange_type' },
+                        { label: 'Size', key: 'size' },
+                        { label: 'Pressure Rating', key: 'pressure_rating' },
+                        { label: 'Material Grade', key: 'material_grade' },
+                        { label: 'Facing Connection', key: 'facing_connection' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      GASKET: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Gasket Type', key: 'gasket_type' },
+                        { label: 'Size', key: 'size' },
+                        { label: 'Pressure Rating', key: 'pressure_rating' },
+                        { label: 'Filler Material', key: 'materials_filler' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      PUMP: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Pump Type', key: 'pump_type' },
+                        { label: 'Flow Rate', key: 'flow_rate' },
+                        { label: 'Head', key: 'head' },
+                        { label: 'Casing Material', key: 'casing_material' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      TRANSMITTER: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Instrument Type', key: 'instrument_type' },
+                        { label: 'Measurement Range', key: 'measurement_range' },
+                        { label: 'Signal', key: 'signal' },
+                        { label: 'Protocol', key: 'protocol' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      'O-RING': [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Elastomer Material', key: 'material_elastomer' },
+                        { label: 'Inner Diameter', key: 'inner_diameter' },
+                        { label: 'Cross Section', key: 'cross_section' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      FASTENER: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Fastener Type', key: 'type' },
+                        { label: 'Size', key: 'size' },
+                        { label: 'Length', key: 'length' },
+                        { label: 'Grade', key: 'grade' },
+                        { label: 'Nut Specification', key: 'nut_specification' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      FITTING: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Fitting Type', key: 'fitting_type' },
+                        { label: 'Size', key: 'size' },
+                        { label: 'Schedule', key: 'schedule' },
+                        { label: 'Material Grade', key: 'material_grade' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      MOTOR: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Motor Type', key: 'motor_type' },
+                        { label: 'Phase', key: 'phase' },
+                        { label: 'Power', key: 'power' },
+                        { label: 'Voltage', key: 'voltage' },
+                        { label: 'Speed', key: 'speed' },
+                        { label: 'Efficiency', key: 'efficiency' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      BEARING: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Bearing Type', key: 'bearing_type' },
+                        { label: 'Bearing Number', key: 'bearing_number' },
+                        { label: 'Seal / Shield', key: 'seal_shield' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                      BELT: [
+                        { label: 'Category', key: 'category' },
+                        { label: 'Belt Type', key: 'belt_type' },
+                        { label: 'Profile', key: 'profile' },
+                        { label: 'Length', key: 'length' },
+                        { label: 'Normalized UOM', key: 'normalized_uom' },
+                      ],
+                    };
 
-                  <div className="p-2.5 bg-surface rounded-input border border-border/80">
-                    <span className="text-[11px] font-medium text-charcoal-muted block">Size</span>
-                    {renderValue(detail.size, true)}
-                  </div>
+                    const resolveAttr = (key: string): string | null | undefined => {
+                      if (normAttrs[key] !== undefined && normAttrs[key] !== null) {
+                        return String(normAttrs[key]);
+                      }
+                      const detailObj = detail as unknown as Record<string, unknown>;
+                      if (detailObj[key] !== undefined && detailObj[key] !== null) {
+                        return String(detailObj[key]);
+                      }
+                      if (key === 'category') return category;
+                      if (key === 'pressure_rating') return detail.pressure_class || (normAttrs.pressure_class as string);
+                      if (key === 'pressure_class') return detail.pressure_class || (normAttrs.pressure_rating as string);
+                      if (key === 'material_grade') return detail.body_material || (normAttrs.body_material as string) || (normAttrs.casing_material as string);
+                      if (key === 'body_material') return detail.body_material || (normAttrs.material_grade as string);
+                      if (key === 'facing_connection') return detail.connection_type || (normAttrs.connection_type as string);
+                      if (key === 'connection_type') return detail.connection_type || (normAttrs.facing_connection as string);
+                      if (key === 'valve_type') return detail.valve_type || (normAttrs.type as string) || (normAttrs.material_type as string);
+                      if (key === 'type') return (normAttrs.type as string) || detail.valve_type || (normAttrs.material_type as string);
+                      if (key === 'trim') return detail.trim || (normAttrs.trim_material as string);
+                      if (key === 'seat_material') return (normAttrs.seat_material as string) || (normAttrs.liner_material as string);
+                      if (key === 'normalized_uom') return detail.normalized_uom || (normAttrs.normalized_uom as string);
+                      return null;
+                    };
 
-                  <div className="p-2.5 bg-surface rounded-input border border-border/80">
-                    <span className="text-[11px] font-medium text-charcoal-muted block">Pressure Class</span>
-                    {renderValue(detail.pressure_class, true)}
-                  </div>
+                    const schema = category && CATEGORY_SCHEMAS[category] ? CATEGORY_SCHEMAS[category] : (
+                      (!category && (detail.valve_type || detail.trim)) ? CATEGORY_SCHEMAS.VALVE : null
+                    );
 
-                  <div className="p-2.5 bg-surface rounded-input border border-border/80">
-                    <span className="text-[11px] font-medium text-charcoal-muted block">Body Material</span>
-                    {renderValue(detail.body_material, true)}
-                  </div>
+                    const fields: { label: string; value: string | null | undefined }[] = [];
+                    const renderedKeys = new Set<string>();
 
-                  <div className="p-2.5 bg-surface rounded-input border border-border/80">
-                    <span className="text-[11px] font-medium text-charcoal-muted block">Connection Type</span>
-                    {renderValue(detail.connection_type, true)}
-                  </div>
+                    if (schema) {
+                      for (const item of schema) {
+                        const val = resolveAttr(item.key);
+                        if (item.key === 'seat_material' && !val) {
+                          continue;
+                        }
+                        renderedKeys.add(item.key);
+                        fields.push({
+                          label: item.label,
+                          value: val,
+                        });
+                      }
+                    } else {
+                      fields.push({ label: 'Category', value: category || 'UNKNOWN' });
+                      for (const [k, v] of Object.entries(normAttrs)) {
+                        if (!['schema_version', 'category'].includes(k) && v !== null && v !== undefined && typeof v !== 'object') {
+                          const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                          fields.push({ label, value: String(v) });
+                          renderedKeys.add(k);
+                        }
+                      }
+                      fields.push({ label: 'Normalized UOM', value: detail.normalized_uom || (normAttrs.normalized_uom as string) });
+                    }
 
-                  <div className="p-2.5 bg-surface rounded-input border border-border/80">
-                    <span className="text-[11px] font-medium text-charcoal-muted block">Trim Material</span>
-                    {renderValue(detail.trim, true)}
-                  </div>
+                    // Render any additional attributes not in schema
+                    const ignoreKeys = new Set([
+                      'schema_version', 'category', 'additional_attributes', 'extraction_confidence', 'provenance_tokens',
+                      'normalized_uom', 'normalized_description', 'liner_material'
+                    ]);
 
-                  <div className="p-2.5 bg-surface rounded-input border border-border/80">
-                    <span className="text-[11px] font-medium text-charcoal-muted block">Normalized UOM</span>
-                    {renderValue(detail.normalized_uom, true)}
-                  </div>
+                    for (const [k, v] of Object.entries(normAttrs)) {
+                      if (!renderedKeys.has(k) && !ignoreKeys.has(k) && v !== null && v !== undefined && typeof v !== 'object') {
+                        const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                        fields.push({ label, value: String(v) });
+                      }
+                    }
+
+                    return fields.map((f) => (
+                      <div key={f.label} className="p-2.5 bg-surface rounded-input border border-border/80">
+                        <span className="text-[11px] font-medium text-charcoal-muted block">{f.label}</span>
+                        {renderValue(f.value, true)}
+                      </div>
+                    ));
+                  })()}
                 </div>
               </div>
             </div>

@@ -70,5 +70,29 @@ class Settings(BaseSettings):
         "http://localhost:5173",
     ]
 
+    # --- AI & Material Intelligence ---
+    ai_enabled: bool = True
+    ai_hybrid_retrieval_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AI_HYBRID_RETRIEVAL_ENABLED", "ai_hybrid_retrieval_enabled"),
+    )
+    ai_semantic_reranking_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AI_SEMANTIC_RERANKING_ENABLED", "ai_semantic_reranking_enabled"),
+    )
+    embedding_model_name: str = "all-MiniLM-L6-v2"
+    embedding_device: str = "cpu"
+    embedding_dimension: int = 384
+    candidate_retrieval_top_k: int = 15
+    candidate_similarity_threshold: float = 0.50
+
+    @property
+    def AI_HYBRID_RETRIEVAL_ENABLED(self) -> bool:
+        return self.ai_hybrid_retrieval_enabled
+
+    @property
+    def AI_SEMANTIC_RERANKING_ENABLED(self) -> bool:
+        return self.ai_semantic_reranking_enabled
+
 
 settings = Settings()

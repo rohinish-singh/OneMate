@@ -24,6 +24,7 @@ import type {
   AuditLogItem,
   AuditLogFilterParams,
   DashboardResponse,
+  RecommendationExplanation,
   ApiError,
 } from '../types/api';
 
@@ -166,6 +167,11 @@ export const api = {
       request<HarmonizeResponse>(`/materials/${materialId}/harmonize`, {
         method: 'POST',
       }),
+
+    getExplanation: (materialId: string, candidateId: string) =>
+      request<RecommendationExplanation>(`/materials/${materialId}/candidate-explanation/${candidateId}`, {
+        method: 'GET',
+      }),
   },
 
   // ==========================================
@@ -197,8 +203,16 @@ export const api = {
   // Reviews
   // ==========================================
   reviews: {
-    getQueue: (reviewerToken: string) =>
-      request<ReviewQueueResponse>('/reviews/queue', {
+    getQueue: (reviewerToken: string, cpseId?: string) =>
+      request<ReviewQueueResponse>(`/reviews/queue${cpseId ? `?cpse_id=${encodeURIComponent(cpseId)}` : ''}`, {
+        method: 'GET',
+        headers: {
+          'X-Reviewer-Token': reviewerToken,
+        },
+      }),
+
+    getExplanation: (recommendationId: string, reviewerToken: string) =>
+      request<RecommendationExplanation>(`/reviews/${recommendationId}/explanation`, {
         method: 'GET',
         headers: {
           'X-Reviewer-Token': reviewerToken,

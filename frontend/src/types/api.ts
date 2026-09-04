@@ -299,3 +299,55 @@ export interface DashboardResponse {
   review: ReviewMetrics;
   cpse_breakdown: CPSEBreakdown[];
 }
+
+// ==========================================
+// Explainability & Reviewer Intelligence (Phase 4)
+// ==========================================
+
+export interface AttributeComparisonItem {
+  attribute: string;
+  source_value: string | null;
+  candidate_value: string | null;
+  status: 'MATCH' | 'CONFLICT' | 'MISSING' | 'UNKNOWN' | 'NOT_APPLICABLE';
+  evidence: string;
+}
+
+export interface EngineeringConflictItem {
+  attribute: string;
+  source: string | null;
+  candidate: string | null;
+  severity: string;
+  reason: string;
+}
+
+export interface SemanticEvidence {
+  semantic_similarity_score: number;
+  candidate_rank: number | null;
+  retrieval_source: string;
+  is_in_baseline: boolean;
+  is_in_ai: boolean;
+  is_reranked: boolean;
+  summary: string;
+}
+
+export interface RecommendationExplanation {
+  source_material_id: string;
+  candidate_material_id: string;
+  source_code: string;
+  candidate_code: string;
+  source_description: string;
+  candidate_description: string;
+  classification: 'SAME' | 'POTENTIALLY_EQUIVALENT' | 'DIFFERENT';
+  confidence: number;
+  recommended_action: 'AUTO_SAFE' | 'REVIEW_REQUIRED' | 'REJECT';
+  why_considered: string;
+  safety_assessment: string;
+  matching_attributes: string[];
+  conflicting_attributes: string[];
+  unknown_or_missing_attributes: string[];
+  attribute_comparisons: AttributeComparisonItem[];
+  engineering_conflicts: EngineeringConflictItem[];
+  semantic_evidence: SemanticEvidence;
+  audit_trail: Record<string, unknown>;
+  error?: string | null;
+}

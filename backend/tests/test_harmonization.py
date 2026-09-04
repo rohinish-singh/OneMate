@@ -192,6 +192,24 @@ def test_regression_abc(db, cpse_x):
     r_c = harmonize_material(db, m_c)
     assert r_c["status"] == "skipped" # 10. NULL never acts as wildcard / C -> no NM
 
+from app.services.harmonization import harmonize_material, harmonize_same_families, get_identity_key
+
+@pytest.fixture
+def cpse_y(db):
+    c = CPSE(code=f"CPSE-Y-{uuid.uuid4()}", name="Y")
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return c
+
+@pytest.fixture
+def cpse_z(db):
+    c = CPSE(code=f"CPSE-Z-{uuid.uuid4()}", name="Z")
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return c
+
 def test_api_endpoint(client: TestClient, db, cpse_x):
     m1 = create_mat(db, cpse_x, {})
     m2 = create_mat(db, cpse_x, {})
@@ -202,3 +220,223 @@ def test_api_endpoint(client: TestClient, db, cpse_x):
     data = resp.json()
     assert data["status"] == "success"
     assert "national_material_id" in data
+
+def test_harmonize_same_families_strainer_mesh(db, cpse_x, cpse_y, cpse_z):
+    tag = uuid.uuid4().hex[:6]
+    stype = f"Y-TYPE-{tag}"
+    # Strainers with Mesh 40 in CPSE X, Y, Z
+    m_x40 = Material(
+        id=uuid.uuid4(),
+        cpse_id=cpse_x.id,
+        source_material_code=f"A-134-{tag}",
+        source_description=f"STRAINER {stype} 2 IN CLASS 150 SS316 MESH 40",
+        source_uom="EA",
+        category=None,
+        normalized_description=f"STRAINER {stype} DN50 CLASS150 SS316 MESH40",
+        normalized_attributes={
+            "category": "STRAINER",
+            "type": stype,
+            "size": "DN50",
+            "pressure_rating": "CLASS150",
+            "material_grade": "SS316",
+            "mesh": "40",
+            "schema_version": "2.0"
+        }
+    )
+    m_y40 = Material(
+        id=uuid.uuid4(),
+        cpse_id=cpse_y.id,
+        source_material_code=f"B-231-{tag}",
+        source_description=f"Y-STRAINER {stype} DN50 150# AISI 316 40 MESH",
+        source_uom="NOS",
+        category=None,
+        normalized_description=f"STRAINER {stype} DN50 CLASS150 SS316 MESH40",
+        normalized_attributes={
+            "category": "STRAINER",
+            "type": stype,
+            "size": "DN50",
+            "pressure_rating": "CLASS150",
+            "material_grade": "SS316",
+            "mesh": "40",
+            "schema_version": "2.0"
+        }
+    )
+    m_z40 = Material(
+        id=uuid.uuid4(),
+        cpse_id=cpse_z.id,
+        source_material_code=f"C-334-{tag}",
+        source_description=f"STRAINER {stype} 2 INCH CL150 SS316 40MESH",
+        source_uom="EA",
+        category=None,
+        normalized_description=f"STRAINER {stype} DN50 CLASS150 SS316 MESH40",
+        normalized_attributes={
+            "category": "STRAINER",
+            "type": stype,
+            "size": "DN50",
+            "pressure_rating": "CLASS150",
+            "material_grade": "SS316",
+            "mesh": "40",
+            "schema_version": "2.0"
+        }
+    )
+    # Strainer with Mesh 80 in CPSE Z
+    m_z80 = Material(
+        id=uuid.uuid4(),
+        cpse_id=cpse_z.id,
+        source_material_code=f"C-335-{tag}",
+        source_description=f"STRAINER {stype} 2 IN CLASS 150 SS316 MESH 80",
+        source_uom="EA",
+        category=None,
+        normalized_description=f"STRAINER {stype} DN50 CLASS150 SS316 MESH80",
+        normalized_attributes={
+            "category": "STRAINER",
+            "type": stype,
+            "size": "DN50",
+            "pressure_rating": "CLASS150",
+            "material_grade": "SS316",
+            "mesh": "80",
+            "schema_version": "2.0"
+        }
+    )
+    db.add_all([m_x40, m_y40, m_z40, m_z80])
+    db.commit()
+
+    # Recommendations: X40 <-> Y40 SAME, Y40 <-> Z40 SAME, X40 <-> Z80 DIFFERENT
+    create_rec(db, m_x40, m_y40, "SAME")
+    create_rec(db, m_y40, m_x40, "SAME")
+    create_rec(db, m_y40, m_z40, "SAME")
+    create_rec(db, m_z40, m_y40, "SAME")
+    create_rec(db, m_x40, m_z80, "DIFFERENT")
+
+    res = harmonize_same_families(db)
+    db.commit()
+
+    assert res["status"] == "success"
+    assert res["national_materials_created"] >= 1
+    assert res["mappings_created"] >= 3
+
+    # Check X40, Y40, Z40 all mapped to the SAME National Material
+    map_x = db.query(MaterialNationalMapping).filter_by(material_id=m_x40.id, status="ACTIVE").first()
+    map_y = db.query(MaterialNationalMapping).filter_by(material_id=m_y40.id, status="ACTIVE").first()
+    map_z = db.query(MaterialNationalMapping).filter_by(material_id=m_z40.id, status="ACTIVE").first()
+    assert map_x is not None
+    assert map_y is not None
+    assert map_z is not None
+    assert map_x.national_material_id == map_y.national_material_id == map_z.national_material_id
+
+    nm = db.query(NationalMaterial).filter_by(id=map_x.national_material_id).first()
+    assert "MESH_40" in nm.identity_key
+    assert "STRAINER" in nm.canonical_description
+
+    # Check Z80 has NO active mapping
+    map_z80 = db.query(MaterialNationalMapping).filter_by(material_id=m_z80.id, status="ACTIVE").first()
+    assert map_z80 is None
+
+def test_harmonize_same_families_idempotent(db, cpse_x, cpse_y):
+    tag = uuid.uuid4().hex[:6]
+    v_type = f"BALL_IDEMP_{tag}"
+    m1 = create_mat(db, cpse_x, {"valve_type": v_type})
+    m2 = create_mat(db, cpse_y, {"valve_type": v_type})
+    create_rec(db, m1, m2, "SAME")
+    create_rec(db, m2, m1, "SAME")
+
+    res1 = harmonize_same_families(db)
+    db.commit()
+    assert res1["national_materials_created"] >= 1
+    assert res1["mappings_created"] >= 2
+
+    # Second run must be completely idempotent: 0 created
+    res2 = harmonize_same_families(db)
+    db.commit()
+    assert res2["national_materials_created"] == 0
+    assert res2["mappings_created"] == 0
+
+
+def test_harmonize_all_categories_preserve_authoritative_category(db, cpse_x, cpse_y):
+    """
+    Verifies that National Material creation for every domain category:
+    1. Preserves the exact category (e.g. STRAINER, PIPE, TRANSMITTER, FITTING, BELT, etc.) and NEVER falls back to VALVE.
+    2. Populates normalized_attributes JSONB directly on the National Material.
+    3. Retains deterministic identity_key and canonical_description.
+    """
+    tag = uuid.uuid4().hex[:6]
+
+    category_samples = [
+        ("STRAINER", {"type": f"Y-TYPE-{tag}", "size": "DN50", "material_grade": "SS316", "pressure_rating": "CLASS150", "mesh": "40"}),
+        ("PIPE", {"construction": "SEAMLESS", "size": f"DN50-{tag}", "schedule": "SCH40", "material_grade": "CARBON_STEEL", "standard_grade": "ASTM A106 GR B"}),
+        ("FLANGE", {"flange_type": f"WELD_NECK_{tag}", "size": "DN100", "material_grade": "CARBON_STEEL", "pressure_rating": "CLASS150", "facing_connection": "RF"}),
+        ("GASKET", {"gasket_type": f"SPIRAL_WOUND_{tag}", "size": "DN50", "pressure_rating": "CLASS150", "materials_filler": "SS316/GRAPHITE"}),
+        ("PUMP", {"pump_type": f"CENTRIFUGAL_{tag}", "flow_rate": "50 M3/HR", "head": "30M", "casing_material": "CARBON_STEEL"}),
+        ("TRANSMITTER", {"instrument_type": f"PRESSURE_{tag}", "measurement_range": "0-100-BAR", "signal": "4-20MA", "protocol": "HART"}),
+        ("FITTING", {"fitting_type": f"ELBOW 90 DEG_{tag}", "size": "DN50", "schedule": "SCH40", "material_grade": "CARBON_STEEL"}),
+        ("BEARING", {"bearing_type": f"BALL DEEP GROOVE_{tag}", "bearing_number": "6205", "seal_shield": "ZZ"}),
+        ("BELT", {"belt_type": f"V-BELT_{tag}", "profile": "SPB", "length": "2500"}),
+    ]
+
+    for cat_name, attrs in category_samples:
+        full_attrs = dict(attrs, category=cat_name, schema_version="2.0")
+        m1 = Material(
+            id=uuid.uuid4(),
+            cpse_id=cpse_x.id,
+            source_material_code=f"M1-{cat_name}-{tag}",
+            source_description=f"TEST {cat_name} X",
+            source_uom="EA",
+            category=cat_name,
+            normalized_description=f"CANONICAL {cat_name} {tag}",
+            normalized_attributes=full_attrs
+        )
+        m2 = Material(
+            id=uuid.uuid4(),
+            cpse_id=cpse_y.id,
+            source_material_code=f"M2-{cat_name}-{tag}",
+            source_description=f"TEST {cat_name} Y",
+            source_uom="EA",
+            category=cat_name,
+            normalized_description=f"CANONICAL {cat_name} {tag}",
+            normalized_attributes=full_attrs
+        )
+        db.add_all([m1, m2])
+        db.commit()
+
+        create_rec(db, m1, m2, "SAME")
+        create_rec(db, m2, m1, "SAME")
+
+        res = harmonize_same_families(db)
+        db.commit()
+
+        assert res["status"] == "success"
+        map1 = db.query(MaterialNationalMapping).filter_by(material_id=m1.id, status="ACTIVE").first()
+        assert map1 is not None, f"Mapping not created for {cat_name}"
+
+        nm = db.query(NationalMaterial).filter_by(id=map1.national_material_id).first()
+        assert nm is not None
+        # CRITICAL ASSERTION: category must be the true category and NEVER "VALVE" (unless category is VALVE)
+        assert nm.category == cat_name, f"Expected NM category {cat_name}, got {nm.category}"
+        assert nm.normalized_attributes is not None
+        if cat_name != "VALVE":
+            assert nm.valve_type is None
+            assert nm.trim is None
+
+def test_harmonize_potential_and_different_not_mapped(db, cpse_x, cpse_y):
+    tag = uuid.uuid4().hex[:6]
+    m1 = create_mat(db, cpse_x, {"valve_type": f"BUTTERFLY_POT_{tag}"})
+    m2 = create_mat(db, cpse_y, {"valve_type": f"BUTTERFLY_POT_{tag}"})
+    create_rec(db, m1, m2, "POTENTIALLY_EQUIVALENT")
+    create_rec(db, m2, m1, "POTENTIALLY_EQUIVALENT")
+
+    m3 = create_mat(db, cpse_x, {"valve_type": f"GATE_DIFF_{tag}"})
+    m4 = create_mat(db, cpse_y, {"valve_type": f"GLOBE_DIFF_{tag}"})
+    create_rec(db, m3, m4, "DIFFERENT")
+    create_rec(db, m4, m3, "DIFFERENT")
+
+    res = harmonize_same_families(db)
+    db.commit()
+
+    map1 = db.query(MaterialNationalMapping).filter_by(material_id=m1.id, status="ACTIVE").first()
+    map2 = db.query(MaterialNationalMapping).filter_by(material_id=m2.id, status="ACTIVE").first()
+    map3 = db.query(MaterialNationalMapping).filter_by(material_id=m3.id, status="ACTIVE").first()
+    map4 = db.query(MaterialNationalMapping).filter_by(material_id=m4.id, status="ACTIVE").first()
+    assert map1 is None
+    assert map2 is None
+    assert map3 is None
+    assert map4 is None

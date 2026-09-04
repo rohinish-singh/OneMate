@@ -118,7 +118,10 @@ def test_missing_values_remain_null_and_mandatory_fields_reported(client: TestCl
     # Error should mention missing mandatory fields
     assert any("Missing mandatory fields" in err["error"] for err in data["errors"])
 
-    mat = db.query(Material).filter(Material.source_material_code == "V-004").first()
+    mat = db.query(Material).filter(
+        Material.source_material_code == "V-004",
+        Material.cpse_id == sample_cpse.id
+    ).first()
     assert mat is not None
     assert mat.source_specifications is None # NOT "UNKNOWN"
     assert mat.category is None

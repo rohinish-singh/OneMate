@@ -96,12 +96,12 @@ def test_national_material_identity_key_unique_and_not_null(client, db):
         national_code=f"N-{uuid.uuid4()}", category="VALVE", canonical_description="Desc",
         identity_key=f"ID-{uuid.uuid4()}",
         valve_type="BALL", size="DN50", body_material="CS", pressure_class="150", connection_type="RF", normalized_uom="EA"
-        # missing trim, which is NOT NULL
+        # trim is nullable since migration c1d2e3f4a5b6 (non-valve NMs don't have trim)
+        # so omitting trim no longer raises IntegrityError
     )
     db.add(nm3)
-    with pytest.raises(IntegrityError):
-        db.commit()
-    db.rollback()
+    db.commit()  # should succeed since trim is now nullable
+    assert nm3.trim is None  # nullable, not an error
 
 def test_match_recommendation_classification_and_self_compare(client, db):
     """
@@ -230,13 +230,13 @@ def test_critical_safety_incomplete_identity(client, db):
     assert matA.trim is None
     assert matB.trim == "SS304"
 
-    # NationalMaterial with trim=None should NOT be allowed
+    # NationalMaterial with trim=None should be ALLOWED since migration c1d2e3f4a5b6
+    # (non-valve categories like STRAINER/PIPE/FITTING don't have trim)
     nm = NationalMaterial(
         national_code=f"N-{uuid.uuid4()}", category="VALVE", canonical_description="D",
         valve_type="BALL", size="DN50", body_material="CS", pressure_class="150", connection_type="RF", trim=None, normalized_uom="EA",
         identity_key=f"ID-{uuid.uuid4()}"
     )
     db.add(nm)
-    with pytest.raises(IntegrityError):
-        db.commit()
-    db.rollback()
+    db.commit()  # succeeds now that trim is nullable
+    assert nm.trim is None
