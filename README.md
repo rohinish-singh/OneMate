@@ -1,6 +1,3 @@
-
-
-````
 # OneMate
 
 ### AI-Driven Standardization & Harmonization of Material Codes Across CPSEs
@@ -29,11 +26,11 @@ Across CPSEs, the same engineering material can be represented in very different
 BALL VALVE 2" CL300 RF CS SS304
 BALL VLV DN50 CLASS 300 RF CARBON STEEL
 2 IN BALL VALVE 300 LB RAISED FACE CS
-````
+```
 
 These descriptions may refer to the same engineering material.
 
-A harmonization system therefore cannot rely on text similarity alone: a single changed technical attribute can represent a genuinely different engineering item.
+A harmonization system cannot rely on text similarity alone — a single changed technical attribute can represent a genuinely different engineering item:
 
 ```text
 CLASS150  ≠  CLASS300
@@ -43,7 +40,7 @@ RF        ≠  SOCKET_WELD
 SS304     ≠  SS316
 ```
 
-The real challenge is:
+The real challenge:
 
 > How do we standardize material descriptions across enterprises without losing engineering meaning or creating unsafe mappings?
 
@@ -69,11 +66,11 @@ CPSE SOURCE DATA
  ENGINEERING VALIDATION
       │
       ▼
- ┌─────────────────┬──────────────────────-┬─────────────────┐
+ ┌─────────────────┬───────────────────────┬─────────────────┐
  │      SAME       │ POTENTIALLY_EQUIVALENT│   DIFFERENT     │
  │  eligible for   │     human review      │ hard conflict   │
  │ harmonization   │                       │                 │
- └─────────────────┴──────────────────────-┴─────────────────┘
+ └─────────────────┴───────────────────────┴─────────────────┘
       │                       │
       ▼                       ▼
  HARMONIZE                   REVIEW
@@ -95,12 +92,12 @@ CPSE SOURCE DATA
 
 ### Why it's built this way
 
-* **Engineering-first** — identity comes from structured technical attributes, not text similarity alone.
-* **Safety-first** — a hard technical conflict overrides a high similarity score.
-* **Human-in-the-loop** — uncertain matches are surfaced for review instead of being silently mapped.
-* **Traceable** — original uploaded data is preserved separately from derived normalized values.
-* **Auditable** — governance actions retain actor, reason, and state history.
-* **Practical MVP architecture** — the core workflow uses a conventional relational architecture without requiring a vector database, queue system, or external LLM API.
+- **Engineering-first** — identity comes from structured technical attributes, not text similarity alone.
+- **Safety-first** — a hard technical conflict overrides a high similarity score.
+- **Human-in-the-loop** — uncertain matches are surfaced for review instead of being silently mapped.
+- **Traceable** — original uploaded data is preserved separately from derived normalized values.
+- **Auditable** — governance actions retain actor, reason, and state history.
+- **Practical MVP architecture** — the core workflow uses a conventional relational architecture without requiring a vector database, queue system, or external LLM API.
 
 ---
 
@@ -108,73 +105,76 @@ CPSE SOURCE DATA
 
 ### Supported Material Categories
 
-The current prototype includes category-aware handling for:
-
-* VALVE
-* PIPE
-* PUMP
-* GASKET
-* FLANGE
-* BEARING
-* FASTENER
-* FITTING
-* STRAINER
-* BELT
-* TRANSMITTER
+- VALVE
+- PUMP
+- GASKET
+- FLANGE
+- BEARING
+- FASTENER
 
 ### Important Engineering Principles
 
-* Deterministic engineering rules are authoritative.
-* Hard technical conflicts override semantic similarity.
-* `UNKNOWN` / `NULL` is not a wildcard.
-* Uncertain cases require human review.
-* Source provenance is preserved.
-* Matching is cross-CPSE.
-* Self-matching is prohibited.
-* Same-CPSE matching is prohibited.
+- Deterministic engineering rules are authoritative.
+- Hard technical conflicts override semantic similarity.
+- `UNKNOWN` / `NULL` is not a wildcard.
+- Uncertain cases require human review.
+- Source provenance is preserved.
+- Matching is cross-CPSE.
+- Self-matching is prohibited.
+- Same-CPSE matching is prohibited.
 
 ### AI Layer
 
 The v2 implementation adds an AI assistance layer to the matching workflow:
 
-* Semantic embeddings support candidate retrieval.
-* AI-assisted retrieval and reranking help identify likely equivalent materials.
-* Deterministic engineering validation remains authoritative.
-* Missing engineering information is not invented by the AI layer.
-* Hard conflicts remain `DIFFERENT` even when descriptions are semantically similar.
-* Evidence, confidence, and explanations are retained for reviewability.
-* The core MVP workflow does not depend on an external LLM API.
+- Material descriptions are encoded as semantic vectors using `all-MiniLM-L6-v2` (sentence-transformers).
+- Cosine similarity between embeddings drives candidate scoring — far more robust than character-level string matching.
+- Deterministic engineering validation remains authoritative.
+- Missing engineering information is not invented by the AI layer.
+- Hard conflicts remain `DIFFERENT` even when descriptions are semantically similar.
+- Evidence, confidence, and explanations are retained for reviewability.
+- The core MVP workflow does not depend on an external LLM API.
 
 ### Matching
 
-* Candidate selection happens across CPSEs.
-* Self-matching is prohibited.
-* Same-CPSE matching is prohibited.
-* Technical attributes drive the final comparison.
-* Classifications are:
+- Candidate selection happens across CPSEs.
+- Self-matching is prohibited.
+- Same-CPSE matching is prohibited.
+- Technical attributes drive the final comparison.
+- Classifications: `SAME`, `POTENTIALLY_EQUIVALENT`, `DIFFERENT`
+- Recommendations contain evidence, confidence, and an explanation.
 
-  * `SAME`
-  * `POTENTIALLY_EQUIVALENT`
-  * `DIFFERENT`
-* Recommendations contain evidence, confidence, and an explanation.
+Example of the evidence returned per match:
+
+```text
+Semantic similarity: 94%
+
+Category:        MATCH
+Type:            MATCH
+Size:            MATCH
+Material:        MATCH
+Pressure:        MATCH
+Connection:      MATCH
+
+Hard conflicts:  NONE
+
+Recommendation:  SAME
+```
 
 ### Normalization
 
-Normalization remains deterministic and category-aware.
+Normalization is deterministic and category-aware.
 
-For supported material categories, descriptions are converted into structured engineering attributes.
+For supported material categories, descriptions are converted into structured engineering attributes:
 
-Examples include:
-
-* Valve type
-* Size
-* Body material
-* Pressure class / rating
-* Connection type
-* Trim material
-* Seat material where applicable
-* Category-specific technical attributes
-* Normalized UOM
+- Valve type
+- Size
+- Body material
+- Pressure class / rating
+- Connection type
+- Trim material
+- Seat material where applicable
+- Normalized UOM
 
 Examples of terminology normalization demonstrated by the dataset:
 
@@ -191,34 +191,18 @@ Missing information remains missing rather than being treated as a wildcard.
 The valve normalization logic distinguishes metallic trim from soft seat material:
 
 ```text
-SS316 TRIM
-    → trim = SS316
-
-EPDM / NBR / PTFE / VITON
-in seat context
-    → seat_material
-```
-
-For example:
-
-```text
-trim          = NULL
-seat_material = EPDM
+SS316 TRIM           → trim = SS316
+EPDM / NBR / PTFE    → seat_material (not trim)
 ```
 
 This prevents a soft seat material from being incorrectly interpreted as metallic trim.
 
 ### Review Governance
 
-Review actions include:
-
-* `ACCEPT`
-* `REJECT`
-* `MARK_DIFFERENT`
-* `UNMAP`
-* `OVERRIDE`
-
-Review actions are protected by a reviewer token and generate audit records.
+- Actions: `ACCEPT`, `REJECT`, `MARK_DIFFERENT`, `UNMAP`, `OVERRIDE`
+- `ACCEPT` is idempotent for the same active recommendation.
+- Conflicting remaps are explicitly governed.
+- Review actions are protected by a reviewer token and generate audit records.
 
 ### National Materials
 
@@ -233,13 +217,9 @@ The harmonization flow:
 5. Maps participating source materials to that National Material.
 6. Preserves source-to-national traceability.
 
-`POTENTIALLY_EQUIVALENT` recommendations are not automatically mapped.
-
-`DIFFERENT` materials are never placed in the same National Material family.
+`POTENTIALLY_EQUIVALENT` recommendations are not automatically mapped. `DIFFERENT` materials are never placed in the same National Material family.
 
 ### Example Engineering Decision
-
-The system can encounter descriptions that are highly similar while still representing different engineering items:
 
 ```text
 GATE VALVE DN50 CS CLASS150 RF
@@ -247,69 +227,32 @@ vs
 GATE VALVE DN50 CS CLASS300 RF
 ```
 
-The engineering rule for pressure class takes precedence over textual similarity:
+Engineering rule for pressure class takes precedence over textual similarity:
 
 ```text
-DIFFERENT
+Result: DIFFERENT
 Reason: pressure class conflict
 ```
 
-The same principle applies to hard conflicts such as:
-
-* size
-* material grade
-* valve type
-* connection type
-* pressure class
-* other category-specific engineering attributes
+The same principle applies to size, material grade, valve type, connection type, and other category-specific engineering attributes.
 
 ---
 
 ## End-to-End Workflow
 
-### 1. Register a CPSE
+**1. Register a CPSE** — create the enterprise source namespace for a catalog.
 
-Create the enterprise source namespace for a catalog.
+**2. Import Materials** — upload a CPSE material catalog as CSV or XLSX. OneMate preserves source material code, description, UOM, specifications, and raw source payload separately from derived data.
 
-### 2. Import Materials
+**3. Normalize** — descriptions are converted into structured, category-aware engineering attributes. Missing information stays missing.
 
-Upload a CPSE material catalog as CSV or XLSX.
+**4. Match** — materials are compared against cross-CPSE candidates. The system combines AI-assisted semantic candidate retrieval with deterministic engineering validation. Each recommendation is classified as `SAME`, `POTENTIALLY_EQUIVALENT`, or `DIFFERENT`.
 
-OneMate preserves source material code, description, UOM, specifications, and raw source payload separately from derived data.
+**5. Harmonize** — validated `SAME` relationships can converge on an existing or newly created National Material family.
 
-### 3. Normalize
+**6. Human Review** — uncertain recommendations enter the review queue. Reviewers can accept, reject, mark different, or override according to the governance workflow.
 
-Descriptions are converted into structured, category-aware engineering attributes.
-
-Missing information stays missing.
-
-### 4. Match
-
-Materials are compared against cross-CPSE candidates.
-
-The system combines AI-assisted semantic candidate retrieval with deterministic engineering validation.
-
-Each recommendation is classified as:
-
-```text
-SAME
-POTENTIALLY_EQUIVALENT
-DIFFERENT
-```
-
-### 5. Harmonize
-
-Validated `SAME` relationships can converge on an existing or newly created National Material family.
-
-### 6. Human Review
-
-Uncertain recommendations enter the review queue.
-
-Reviewers can accept, reject, mark different, or override according to the application's governance workflow.
-
-### 7. Audit
-
-Material and governance operations are recorded for traceability.
+**7. Audit** — material and governance operations are recorded for traceability.
 
 ---
 
@@ -334,7 +277,8 @@ Material and governance operations are recorded for traceability.
 │  Deterministic Normalization                │
 │        │                                    │
 │        ▼                                    │
-│  AI-Assisted Candidate Retrieval / Ranking  │
+│  AI-Assisted Candidate Retrieval            │
+│  (sentence-transformers, cosine similarity) │
 │        │                                    │
 │        ▼                                    │
 │  Deterministic Engineering Validation       │
@@ -356,39 +300,43 @@ Material and governance operations are recorded for traceability.
 
 ### Architecture Principles
 
-* Backend remains authoritative for classification and governance.
-* Frontend does not supply confidence scores, thresholds, or National Material codes.
-* Source records are preserved independently from derived normalized attributes.
-* National Material mappings remain traceable to source materials.
-* The MVP does not require Redis, Celery, Kafka, a vector database, or an external LLM API for the core workflow.
+- Backend is authoritative for classification and governance.
+- Frontend does not supply confidence scores, thresholds, or National Material codes.
+- Source records are preserved independently from derived normalized attributes.
+- National Material mappings remain traceable to source materials.
+- No Redis, Celery, Kafka, vector database, or external LLM API required for the core workflow.
 
 ---
 
 ## Tech Stack
 
-| Layer      | Technology                                    |
-| ---------- | --------------------------------------------- |
-| Frontend   | React + TypeScript                            |
-| Build      | Vite                                          |
-| Styling    | Tailwind CSS                                  |
-| Backend    | FastAPI                                       |
-| Language   | Python                                        |
-| ORM        | SQLAlchemy                                    |
-| Database   | PostgreSQL                                    |
-| Validation | Pydantic                                      |
-| Migrations | Alembic                                       |
-| AI / NLP   | Embeddings, semantic retrieval, and reranking |
-| Testing    | Pytest                                        |
+| Layer      | Technology                          |
+| ---------- | ----------------------------------- |
+| Frontend   | React + TypeScript                  |
+| Build      | Vite                                |
+| Styling    | Tailwind CSS                        |
+| Backend    | FastAPI                             |
+| Language   | Python                              |
+| ORM        | SQLAlchemy                          |
+| Database   | PostgreSQL                          |
+| Validation | Pydantic                            |
+| Migrations | Alembic                             |
+| AI / NLP   | sentence-transformers, scikit-learn |
+| Testing    | Pytest                              |
 
 ---
 
 ## API Surface
 
 ```http
+# Health
+GET    /api/v1/health
+
 # CPSE
 POST   /api/v1/cpses
 GET    /api/v1/cpses
 GET    /api/v1/cpses/{cpse_id}/materials
+DELETE /api/v1/cpses/{cpse_id}
 
 # Materials
 POST   /api/v1/materials/import
@@ -396,7 +344,10 @@ GET    /api/v1/materials/{material_id}
 POST   /api/v1/materials/{material_id}/normalize
 POST   /api/v1/materials/{material_id}/match
 POST   /api/v1/materials/{material_id}/harmonize
+POST   /api/v1/materials/{material_id}/unmap
 GET    /api/v1/materials/{material_id}/mapping-history
+GET    /api/v1/materials/{material_id}/ai-explain?candidate_id={id}
+DELETE /api/v1/materials/{material_id}
 
 # Review
 GET    /api/v1/reviews/queue
@@ -413,13 +364,13 @@ GET    /api/v1/audit
 GET    /api/v1/dashboard
 ```
 
-See the repository documentation for detailed request and response schemas.
+See `docs/FRONTEND_API_CONTRACT.md` for request/response schemas.
 
 ---
 
 ## Demo Dataset
 
-Sample upload files are provided in:
+Sample upload files are provided in `demo_data/`:
 
 ```text
 demo_data/
@@ -428,9 +379,11 @@ demo_data/
 └── CPSE_C.xlsx
 ```
 
-These files are sample input data for demonstration and testing. They are separate from application database state.
+These files are synthetic demonstration data, separate from application database state. They are built to exercise: equivalent descriptions, formatting and abbreviation differences, missing attributes, and deliberate hard conflicts (pressure class, size, valve type, connection type, trim).
 
 The repository does **not** include `ground_truth.xlsx`.
+
+> The included material data is synthetic and used for demonstration and testing — it is not real CPSE data.
 
 ---
 
@@ -438,10 +391,10 @@ The repository does **not** include `ground_truth.xlsx`.
 
 ### Prerequisites
 
-* Python 3.x
-* Node.js
-* npm
-* PostgreSQL
+- Python 3.x
+- Node.js
+- npm
+- PostgreSQL
 
 ### Backend
 
@@ -458,11 +411,9 @@ pip install -e .
 uvicorn app.main:app --reload --port 8000
 ```
 
-Backend:
+Runs at `http://localhost:8000`.
 
-```text
-http://localhost:8000
-```
+> On first startup the AI embedding model (`all-MiniLM-L6-v2`) downloads once and caches locally. Subsequent starts use the cache.
 
 ### Frontend
 
@@ -473,15 +424,9 @@ npm install
 npm run dev
 ```
 
-Frontend:
-
-```text
-http://localhost:5173
-```
+Runs at `http://localhost:5173`.
 
 ### Database
-
-Run the committed Alembic migrations against a fresh database:
 
 ```bash
 cd backend
@@ -512,11 +457,8 @@ Inspect National Materials / Audit Trail
 
 ### Backend
 
-Use an isolated test database rather than the demo/development database:
-
 ```bash
 cd backend
-
 DATABASE_URL=<TEST_DATABASE_URL> .venv/bin/pytest tests/ -q
 ```
 
@@ -524,7 +466,6 @@ DATABASE_URL=<TEST_DATABASE_URL> .venv/bin/pytest tests/ -q
 
 ```bash
 cd frontend
-
 npm run build
 ```
 
@@ -553,58 +494,25 @@ This section reflects the implemented v2 prototype rather than the target design
 | Responsive Frontend (Dashboard, Explorer, Matcher, Review, National Registry, Audit) | ✅ Done |
 | Demo Excel dataset                                                                   | ✅ Done |
 
-### Latest Local Validation
-
-The latest local validation performed before the v2 release included:
-
-```text
-Backend tests:     263 passed, 1 warning
-Frontend build:    passed
-git diff --check:  passed
-```
-
-The warning did not cause a test failure.
-
 ---
 
 ## Security & Governance
 
-* **Reviewer-protected actions** — review endpoints require a reviewer token validated server-side.
-* **Source provenance** — original uploaded row data is preserved separately from derived data.
-* **Backend authority** — classification, National Material generation, and governance decisions originate from the backend.
-* **Human-in-the-loop** — uncertain cases are surfaced for review rather than silently mapped.
-* **Audit preservation** — governance history is retained independently of the source records it describes.
+- **Reviewer-protected actions** — review endpoints require a reviewer token validated server-side.
+- **Source provenance** — original uploaded row data is preserved separately from derived data.
+- **Backend authority** — classification, National Material generation, and governance decisions originate from the backend only.
+- **Human-in-the-loop** — uncertain cases are surfaced for review rather than silently mapped.
+- **Audit preservation** — governance history is retained independently of the source records it describes.
 
 ---
 
 ## MVP Scope
 
-### Included
+**Included:** CPSE management, CSV/XLSX material ingestion, source data preservation, category-aware deterministic normalization, AI-assisted semantic candidate retrieval, deterministic engineering validation, safe automatic harmonization, human review, National Material registry, mapping history, audit trail, dashboard.
 
-* CPSE management
-* CSV/XLSX material ingestion
-* Source data preservation
-* Category-aware deterministic normalization
-* AI-assisted candidate retrieval / reranking
-* Deterministic engineering validation
-* Safe automatic harmonization
-* Human review
-* National Material registry
-* Mapping history
-* Audit trail
-* Dashboard and operational views
+**Intentionally out of scope for the MVP:** live SAP/ERP integration, procurement and financial analytics, Redis/Celery/Kafka infrastructure, ANN/FAISS vector search, external LLM API dependency in the core workflow, production SSO, background job infrastructure.
 
-### Intentionally Out of Scope for the MVP
-
-* Live SAP / ERP integration
-* Procurement and financial analytics
-* Redis / Celery / Kafka infrastructure
-* Vector database infrastructure
-* External LLM API dependency in the core workflow
-* Production SSO
-* Background job infrastructure
-
-The objective is a safe, explainable, demonstrable harmonization workflow rather than the largest possible platform.
+The objective is a safe, explainable, demonstrable harmonization workflow — not the largest possible platform. See `docs/ARCHITECTURE.md` for the full production design and `docs/MVP_SCOPE.md` for the exact MVP boundary.
 
 ---
 
@@ -620,6 +528,7 @@ onemate/
 │   │   ├── schemas/
 │   │   ├── services/
 │   │   │   └── ai/
+│   │   │       └── embedding.py
 │   │   └── models.py
 │   ├── alembic/
 │   └── tests/
@@ -636,52 +545,22 @@ onemate/
 │   ├── CPSE_B.xlsx
 │   └── CPSE_C.xlsx
 └── docs/
+    ├── ARCHITECTURE.md
+    ├── FRONTEND_API_CONTRACT.md
+    ├── FRONTEND_DESIGN.md
+    └── MVP_SCOPE.md
 ```
 
 ---
 
 ## Smart India Hackathon
 
-**Problem Statement:** SIH26099
-
-**Title:** AI-Driven Standardization and Harmonization of Material Codes Across CPSEs
-
-**Theme:** Smart Automation
-**Category:** Software
+**Problem Statement:** SIH26099  
+**Title:** AI-Driven Standardization and Harmonization of Material Codes Across CPSEs  
+**Theme:** Smart Automation · **Category:** Software  
 **Organization:** Ministry of Petroleum & Natural Gas — Chennai Petroleum Corporation Limited (CPCL)
 
 
 ## License
 
 MIT License.
-
-````
-
-### One thing before replacing your README
-
-Your existing README contains a few claims that are now stale, especially:
-
-```text
-Normalization + attribute extraction (VALVE) | ✅ Done
-Deterministic matching
-backend/tests/demo_data/
-````
-
-Those are the sections I specifically corrected for v2.  
-
-Save the block above as:
-
-```text
-~/onemate/README.md
-```
-
-Then:
-
-```bash
-cd ~/onemate
-git diff --check
-git add README.md
-git commit -m "docs: update README for v2 AI implementation"
-git push origin ai-material-intelligence
-```
-
